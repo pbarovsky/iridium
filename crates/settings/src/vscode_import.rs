@@ -218,6 +218,7 @@ impl VsCodeSettings {
             node: self.node_binary_settings(),
 
             outline_panel: self.outline_panel_settings_content(),
+            search_panel: None,
             preview_tabs: self.preview_tabs_settings_content(),
             project: self.project_settings_content(),
             project_panel: self.project_panel_settings_content(),
@@ -232,6 +233,7 @@ impl VsCodeSettings {
             server_url: None,
             session: None,
             status_bar: self.status_bar_settings_content(),
+            activity_bar: self.activity_bar_settings_content(),
             tab_bar: self.tab_bar_settings_content(),
             tab_switcher: None,
             tabs: self.item_settings_content(),
@@ -835,6 +837,24 @@ impl VsCodeSettings {
         })
     }
 
+    fn activity_bar_settings_content(&self) -> Option<ActivityBarSettingsContent> {
+        let location = self.read_str("workbench.activityBar.location");
+        skip_default(ActivityBarSettingsContent {
+            show: location.and_then(|location| (location == "hidden").then_some(false)),
+            position: match location {
+                Some("top") => Some(ActivityBarPosition::Top),
+                _ => self.read_str("workbench.sideBar.location").and_then(
+                    |location| match location {
+                        "left" => Some(ActivityBarPosition::Left),
+                        "right" => Some(ActivityBarPosition::Right),
+                        _ => None,
+                    },
+                ),
+            },
+            icon_size: None,
+        })
+    }
+
     fn status_bar_settings_content(&self) -> Option<StatusBarSettingsContent> {
         skip_default(StatusBarSettingsContent {
             show: self.read_bool("workbench.statusBar.visible"),
@@ -1119,6 +1139,7 @@ impl VsCodeSettings {
                 }
             }),
             zoomed_padding: None,
+            modern_ui: None,
             focus_follows_mouse: None,
         }
     }

@@ -186,6 +186,7 @@ pub enum HighlightKey {
     PickerPreview,
     ProjectSearchView,
     Rename,
+    SearchPanelMatches,
     SearchWithinRange,
     SelectedTextHighlight,
     SyntaxTreeView(usize),

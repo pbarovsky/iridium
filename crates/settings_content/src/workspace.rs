@@ -143,6 +143,11 @@ pub struct WorkspaceSettingsContent {
     ///
     /// Default: true
     pub zoomed_padding: Option<bool>,
+    /// Whether to draw the docks and the editor area as separate rounded
+    /// cards with gaps between them, like VS Code's modern layout.
+    ///
+    /// Default: true
+    pub modern_ui: Option<bool>,
     /// Whether invoking a panel's `ToggleFocus` action while the panel is
     /// already focused closes the panel, instead of just moving focus back
     /// to the editor. This only applies to a panel's focus-toggle action, not
@@ -555,6 +560,50 @@ pub struct TabBarSettingsContent {
     ///
     /// Default: false
     pub show_pinned_tabs_in_separate_row: Option<bool>,
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    JsonSchema,
+    MergeFrom,
+    strum::VariantArray,
+    strum::VariantNames,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityBarPosition {
+    /// A vertical bar on the left edge of the window.
+    #[default]
+    Left,
+    /// A vertical bar on the right edge of the window.
+    Right,
+    /// A horizontal bar at the top of the left dock, like Cursor.
+    Top,
+}
+
+#[with_fallible_options]
+#[derive(Clone, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug, PartialEq)]
+pub struct ActivityBarSettingsContent {
+    /// Whether to show the activity bar. It holds the buttons for the left
+    /// and right dock panels, like the activity bar in VS Code.
+    ///
+    /// Default: true
+    pub show: Option<bool>,
+    /// Where the activity bar is shown.
+    ///
+    /// Default: left
+    pub position: Option<ActivityBarPosition>,
+    /// Size of the icons on a vertical activity bar, in pixels (12 to 48). The
+    /// bar grows or shrinks to fit them. The top bar always matches the tab bar.
+    ///
+    /// Default: 20
+    pub icon_size: Option<f32>,
 }
 
 #[with_fallible_options]

@@ -16,10 +16,12 @@ pub use zed_actions::search::{
 pub use search_status_button::SEARCH_ICON;
 
 use crate::project_search::ProjectSearchBar;
+use crate::search_panel::SearchPanel;
 
 pub mod buffer_search;
 pub mod project_search;
 pub(crate) mod search_bar;
+pub mod search_panel;
 pub mod search_status_button;
 pub mod text_finder;
 
@@ -27,6 +29,7 @@ pub fn init(cx: &mut App) {
     menu::init();
     buffer_search::init(cx);
     project_search::init(cx);
+    search_panel::init(cx);
     text_finder::init(cx);
 }
 
@@ -81,13 +84,14 @@ pub enum SearchOption {
     Backwards,
 }
 
-const REPLACE_PLACEHOLDER: &str = "Replace in project…";
-const INCLUDE_PLACEHOLDER: &str = "Include: e.g. src/**/*.rs";
-const EXCLUDE_PLACEHOLDER: &str = "Exclude: e.g. vendor/*, *.lock";
+pub(crate) const REPLACE_PLACEHOLDER: &str = "Replace in project…";
+pub(crate) const INCLUDE_PLACEHOLDER: &str = "Include: e.g. src/**/*.rs";
+pub(crate) const EXCLUDE_PLACEHOLDER: &str = "Exclude: e.g. vendor/*, *.lock";
 
 pub enum SearchSource<'a, 'b> {
     Buffer,
     Project(&'a Context<'b, ProjectSearchBar>),
+    Panel(&'a Context<'b, SearchPanel>),
 }
 
 impl SearchOption {
@@ -153,6 +157,12 @@ impl SearchOption {
                 let options = self.as_options();
                 button.on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
                     this.toggle_search_option(options, window, cx);
+                }))
+            }
+            SearchSource::Panel(cx) => {
+                let options = self.as_options();
+                button.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    this.toggle_search_option(options, cx);
                 }))
             }
         })

@@ -99,6 +99,22 @@ pub(crate) fn render_text_input(
     color_override: Option<Color>,
     app: &App,
 ) -> impl IntoElement {
+    render_text_input_on(
+        editor,
+        color_override,
+        app.theme().colors().toolbar_background,
+        app,
+    )
+}
+
+/// Like [`render_text_input`], for an input that sits on `background` rather than
+/// on a toolbar, so the editor doesn't show up as a box of a different color.
+pub(crate) fn render_text_input_on(
+    editor: &Entity<Editor>,
+    color_override: Option<Color>,
+    background: Hsla,
+    app: &App,
+) -> impl IntoElement {
     let (color, use_syntax) = if editor.read(app).read_only(app) {
         (app.theme().colors().text_disabled, false)
     } else {
@@ -121,7 +137,7 @@ pub(crate) fn render_text_input(
     };
 
     let mut editor_style = EditorStyle {
-        background: app.theme().colors().toolbar_background,
+        background,
         local_player: app.theme().players().local(),
         text: text_style,
         ..EditorStyle::default()

@@ -45,6 +45,7 @@ pub struct WorkspaceSettings {
     pub use_system_window_tabs: bool,
     pub fullscreen_mode: settings::FullscreenMode,
     pub zoomed_padding: bool,
+    pub modern_ui: bool,
     pub window_decorations: settings::WindowDecorations,
     pub focus_follows_mouse: FocusFollowsMouse,
 }
@@ -151,6 +152,7 @@ impl Settings for WorkspaceSettings {
             use_system_window_tabs: workspace.use_system_window_tabs.unwrap(),
             fullscreen_mode: workspace.fullscreen_mode.unwrap(),
             zoomed_padding: workspace.zoomed_padding.unwrap(),
+            modern_ui: workspace.modern_ui.unwrap(),
             window_decorations: workspace.window_decorations.unwrap(),
             focus_follows_mouse: FocusFollowsMouse {
                 enabled: workspace
@@ -211,6 +213,24 @@ impl Settings for TabBarSettings {
             show_nav_history_buttons: tab_bar.show_nav_history_buttons.unwrap(),
             show_tab_bar_buttons: tab_bar.show_tab_bar_buttons.unwrap(),
             show_pinned_tabs_in_separate_row: tab_bar.show_pinned_tabs_in_separate_row.unwrap(),
+        }
+    }
+}
+
+#[derive(Deserialize, RegisterSetting)]
+pub struct ActivityBarSettings {
+    pub show: bool,
+    pub position: settings::ActivityBarPosition,
+    pub icon_size: Option<f32>,
+}
+
+impl Settings for ActivityBarSettings {
+    fn from_settings(content: &settings::SettingsContent) -> Self {
+        let activity_bar = content.activity_bar.clone().unwrap();
+        ActivityBarSettings {
+            show: activity_bar.show.unwrap(),
+            position: activity_bar.position.unwrap(),
+            icon_size: activity_bar.icon_size.map(|size| size.clamp(12., 48.)),
         }
     }
 }

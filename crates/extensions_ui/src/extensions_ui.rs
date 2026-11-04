@@ -1,6 +1,9 @@
 mod components;
 mod extension_suggestions;
 mod extension_version_selector;
+mod extensions_panel;
+
+pub use extensions_panel::ExtensionsPanel;
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -29,9 +32,9 @@ use settings::{Settings, SettingsContent};
 use strum::IntoEnumIterator as _;
 use theme_settings::ThemeSettings;
 use ui::{
-    Banner, CommonAnimationExt, ContextMenu, Divider, ListItem, ListItemSpacing, ScrollableHandle,
-    Switch, ToggleButtonGroup, ToggleButtonGroupSize, ToggleButtonGroupStyle, ToggleButtonSimple,
-    WithScrollbar, prelude::*,
+    Banner, CommonAnimationExt, ContextMenu, Divider, ListItem, ListItemSpacing, PopoverMenu,
+    ScrollableHandle, Switch, ToggleButtonGroup, ToggleButtonGroupSize, ToggleButtonGroupStyle,
+    ToggleButtonSimple, Tooltip, WithScrollbar, prelude::*,
 };
 use util::ResultExt;
 use vim_mode_setting::VimModeSetting;
@@ -110,6 +113,7 @@ pub fn init(cx: &mut App) {
     })
     .detach();
     extension_suggestions::init(cx);
+    extensions_panel::init(cx);
 
     cx.observe_new(move |workspace: &mut Workspace, window, _cx| {
         if window.is_none() {
@@ -132,6 +136,23 @@ pub fn init(cx: &mut App) {
                         ExtensionCategoryFilter::Snippets => ExtensionProvides::Snippets,
                         ExtensionCategoryFilter::DebugAdapters => ExtensionProvides::DebugAdapters,
                     });
+
+                    if workspace.panel::<ExtensionsPanel>(cx).is_some() {
+                        let Some(panel) = workspace.focus_panel::<ExtensionsPanel>(window, cx)
+                        else {
+                            return;
+                        };
+                        let page = panel.read(cx).page().clone();
+                        page.update(cx, |extensions_page, cx| {
+                            if provides_filter.is_some() {
+                                extensions_page.change_provides_filter(provides_filter, cx);
+                            }
+                            if let Some(id) = action.id.as_ref() {
+                                extensions_page.focus_extension(id, window, cx);
+                            }
+                        });
+                        return;
+                    }
 
                     let existing = workspace
                         .active_pane()
@@ -407,6 +428,8 @@ pub struct ExtensionsPage {
     extension_fetch_task: Option<Task<()>>,
     local_search_task: Option<Task<()>>,
     upsells: BTreeSet<Feature>,
+    /// Whether the page is shown in the narrow extensions panel rather than a tab.
+    compact: bool,
 }
 
 impl ExtensionsPage {
@@ -471,6 +494,7 @@ impl ExtensionsPage {
                 _subscriptions: subscriptions,
                 query_editor,
                 upsells: BTreeSet::default(),
+                compact: false,
             };
             this.update_local_search_results(cx);
             this.fetch_extensions(FetchDebounce::Immediate, None, cx);
@@ -736,6 +760,7 @@ impl ExtensionsPage {
                 let row = *self.displayed_extensions.get(index)?;
                 self.render_extension(row, extension_store, cx)
             })
+            .map(|card| card.compact(self.compact))
             .collect()
     }
 
@@ -928,7 +953,13 @@ impl ExtensionsPage {
         EditorElement::new(
             editor,
             EditorStyle {
-                background: cx.theme().colors().editor_background,
+                // In the panel the input sits on the panel, so it takes the panel's
+                // color instead of showing up as a box of a different color.
+                background: if self.compact {
+                    cx.theme().colors().panel_background
+                } else {
+                    cx.theme().colors().editor_background
+                },
                 local_player: cx.theme().players().local(),
                 text: text_style,
                 ..Default::default()
@@ -958,6 +989,11 @@ impl ExtensionsPage {
             cx,
         );
         self.refresh_feature_upsells(cx);
+    }
+
+    pub fn set_compact(&mut self, compact: bool, cx: &mut Context<Self>) {
+        self.compact = compact;
+        cx.notify();
     }
 
     pub fn focus_extension(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
@@ -1469,12 +1505,127 @@ impl PickerDelegate for DevExtensionRebuildPickerDelegate {
     }
 }
 
+impl ExtensionsPage {
+    fn set_filter(&mut self, filter: ExtensionFilter, cx: &mut Context<Self>) {
+        self.filter = filter;
+        self.rebuild_displayed_extensions(cx);
+        self.scroll_to_top(cx);
+    }
+
+    /// The header of the extensions panel: the search field and the filters,
+    /// laid out to fit a narrow dock.
+    fn render_compact_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let search = self.render_search(cx).min_w_0().h_7();
+        let filter_button = |id: &'static str, label: &'static str, filter: ExtensionFilter| {
+            Button::new(id, label)
+                .label_size(LabelSize::Small)
+                .style(ButtonStyle::Subtle)
+                .toggle_state(self.filter == filter)
+                .on_click(cx.listener(move |this, _, _, cx| this.set_filter(filter, cx)))
+        };
+        let category_label = self
+            .provides_filter
+            .map(extension_provides_label)
+            .unwrap_or("All Categories");
+        let weak_page = cx.weak_entity();
+
+        v_flex()
+            .w_full()
+            .p_2()
+            .gap_1p5()
+            .border_b_1()
+            .border_color(cx.theme().colors().border_variant)
+            .child(
+                h_flex().w_full().gap_1().child(search).child(
+                    IconButton::new("install-dev-extension", IconName::Plus)
+                        .icon_size(IconSize::Small)
+                        .tooltip(Tooltip::text("Install Dev Extension"))
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(InstallDevExtension), cx)
+                        }),
+                ),
+            )
+            .child(
+                h_flex()
+                    .w_full()
+                    .gap_0p5()
+                    .child(filter_button("filter-all", "All", ExtensionFilter::All))
+                    .child(filter_button(
+                        "filter-installed",
+                        "Installed",
+                        ExtensionFilter::Installed,
+                    ))
+                    .child(filter_button(
+                        "filter-not-installed",
+                        "Available",
+                        ExtensionFilter::NotInstalled,
+                    ))
+                    .child(div().flex_1())
+                    .child(
+                        PopoverMenu::new("extension-category-filter")
+                            .trigger(
+                                Button::new("extension-category-trigger", category_label)
+                                    .label_size(LabelSize::Small)
+                                    .style(ButtonStyle::Subtle)
+                                    .end_icon(
+                                        Icon::new(IconName::ChevronDown)
+                                            .size(IconSize::XSmall)
+                                            .color(Color::Muted),
+                                    ),
+                            )
+                            .anchor(gpui::Anchor::TopRight)
+                            .menu(move |window, cx| {
+                                let weak_page = weak_page.clone();
+                                Some(ContextMenu::build(window, cx, move |mut menu, _, _| {
+                                    let categories = std::iter::once(None).chain(
+                                        ExtensionProvides::iter()
+                                            .filter(|provides| is_filterable_category(*provides))
+                                            .map(Some),
+                                    );
+                                    for provides in categories {
+                                        let label = provides
+                                            .map(extension_provides_label)
+                                            .unwrap_or("All Categories");
+                                        let weak_page = weak_page.clone();
+                                        menu = menu.entry(label, None, move |_, cx| {
+                                            weak_page
+                                                .update(cx, |page, cx| {
+                                                    page.change_provides_filter(provides, cx)
+                                                })
+                                                .ok();
+                                        });
+                                    }
+                                    menu
+                                }))
+                            }),
+                    ),
+            )
+    }
+}
+
+/// Grammars and a few other kinds of extension add nothing users would filter by.
+fn is_filterable_category(provides: ExtensionProvides) -> bool {
+    !matches!(
+        provides,
+        ExtensionProvides::AgentServers
+            | ExtensionProvides::Grammars
+            | ExtensionProvides::IndexedDocsProviders
+            | ExtensionProvides::SlashCommands
+    )
+}
+
 impl Render for ExtensionsPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let compact = self.compact;
         v_flex()
             .size_full()
-            .bg(cx.theme().colors().editor_background)
-            .child(
+            .bg(if compact {
+                cx.theme().colors().panel_background
+            } else {
+                cx.theme().colors().editor_background
+            })
+            .when(compact, |this| this.child(self.render_compact_header(cx)))
+            .when(!compact, |this| this.child(
                 v_flex()
                     .gap_4()
                     .pt_4()
@@ -1545,8 +1696,8 @@ impl Render for ExtensionsPage {
                                 ),
                             ),
                     ),
-            )
-            .child(
+            ))
+            .when(!compact, |this| this.child(
                 h_flex()
                     .id("filter-row")
                     .gap_2()
@@ -1570,13 +1721,7 @@ impl Render for ExtensionsPage {
                     )
                     .children(
                         ExtensionProvides::iter()
-                            .filter(|provides| match provides {
-                                ExtensionProvides::AgentServers
-                                | ExtensionProvides::Grammars // grammars do not add anything of value to users currently
-                                | ExtensionProvides::IndexedDocsProviders
-                                | ExtensionProvides::SlashCommands => false,
-                                _ => true,
-                            })
+                            .filter(|provides| is_filterable_category(*provides))
                             .map(|provides| {
                                 let label = extension_provides_label(provides);
                                 let button_id =
@@ -1596,9 +1741,9 @@ impl Render for ExtensionsPage {
                                     })
                             }),
                     ),
-            )
-            .child(self.render_feature_upsells(cx))
-            .child(v_flex().px_4().size_full().overflow_y_hidden().map(|this| {
+            ))
+            .when(!compact, |this| this.child(self.render_feature_upsells(cx)))
+            .child(v_flex().map(|this| if compact { this.px_1() } else { this.px_4() }).size_full().overflow_y_hidden().map(|this| {
                 let count = self.displayed_extensions.len();
 
                 if count == 0 {
@@ -1627,7 +1772,7 @@ impl Render for ExtensionsPage {
                     .child(
                         uniform_list("entries", count, cx.processor(Self::render_extensions))
                             .flex_grow_1()
-                            .pb_4()
+                            .map(|list| if compact { list.py_1() } else { list.pb_4() })
                             .track_scroll(scroll_handle),
                     )
                     .vertical_scrollbar_for(scroll_handle, window, cx)

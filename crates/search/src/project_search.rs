@@ -8,6 +8,7 @@ use crate::{
         ActionButtonState, HistoryNavigationDirection, alignment_element, input_base_styles,
         render_action_button, render_text_input, should_navigate_history,
     },
+    search_panel::SearchPanel,
     text_finder::TextFinder,
 };
 use anyhow::Context as _;
@@ -80,7 +81,7 @@ actions!(
     ]
 );
 
-fn split_glob_patterns(text: &str) -> Vec<&str> {
+pub(crate) fn split_glob_patterns(text: &str) -> Vec<&str> {
     let mut patterns = Vec::new();
     let mut pattern_start = 0;
     let mut brace_depth: usize = 0;
@@ -245,7 +246,7 @@ pub fn init(cx: &mut App) {
     .detach();
 }
 
-fn contains_uppercase(str: &str) -> bool {
+pub(crate) fn contains_uppercase(str: &str) -> bool {
     str.chars().any(|c| c.is_uppercase())
 }
 
@@ -273,7 +274,7 @@ pub struct ProjectSearch {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SearchMode {
+pub(crate) enum SearchMode {
     Manual,
     OnType,
     Refresh,
@@ -303,7 +304,7 @@ enum SearchPhase {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum SearchState {
+pub(crate) enum SearchState {
     #[default]
     Idle,
     Running {
@@ -314,13 +315,13 @@ enum SearchState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SearchActivity {
+pub(crate) enum SearchActivity {
     Searching,
     WaitingForScan,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SearchCompletion {
+pub(crate) enum SearchCompletion {
     NoResults,
     Results { limit_reached: bool },
 }
@@ -337,11 +338,11 @@ impl SearchState {
         }
     }
 
-    fn no_results_so_far(self) -> bool {
+    pub(crate) fn no_results_so_far(self) -> bool {
         self.completion() == Some(SearchCompletion::NoResults)
     }
 
-    fn limit_reached(self) -> bool {
+    pub(crate) fn limit_reached(self) -> bool {
         matches!(
             self.completion(),
             Some(SearchCompletion::Results {
@@ -385,8 +386,8 @@ pub struct ProjectSearchView {
 
 #[derive(Debug, Clone)]
 pub struct ProjectSearchSettings {
-    search_options: SearchOptions,
-    filters_enabled: bool,
+    pub(crate) search_options: SearchOptions,
+    pub(crate) filters_enabled: bool,
 }
 
 pub struct ProjectSearchBar {
@@ -427,7 +428,7 @@ impl ProjectSearch {
         }
     }
 
-    fn clone(&self, cx: &mut Context<Self>) -> Entity<Self> {
+    pub(crate) fn clone(&self, cx: &mut Context<Self>) -> Entity<Self> {
         cx.new(|cx| {
             let excerpts = self
                 .excerpts
@@ -544,7 +545,7 @@ impl ProjectSearch {
         }
     }
 
-    fn search(
+    pub(crate) fn search(
         &mut self,
         query: SearchQuery,
         mode: SearchMode,
@@ -589,7 +590,15 @@ impl ProjectSearch {
         cx.notify();
     }
 
-    fn clear(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn search_state(&self) -> SearchState {
+        self.search_state
+    }
+
+    pub(crate) fn last_search_query_text(&self) -> Option<&str> {
+        self.last_search_query_text.as_deref()
+    }
+
+    pub(crate) fn clear(&mut self, cx: &mut Context<Self>) {
         self.pending_search = None;
         self.match_ranges.clear();
         self.excerpts.update(cx, |excerpts, cx| excerpts.clear(cx));
@@ -1673,6 +1682,14 @@ impl ProjectSearchView {
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) {
+        if workspace.panel::<SearchPanel>(cx).is_some() {
+            let action = DeploySearch {
+                included_files: Some(filter_str),
+                ..DeploySearch::default()
+            };
+            SearchPanel::deploy(workspace, &action, window, cx);
+            return;
+        }
         let weak_workspace = cx.entity().downgrade();
 
         let entity = cx
@@ -1696,6 +1713,11 @@ impl ProjectSearchView {
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) {
+        if workspace.panel::<SearchPanel>(cx).is_some() {
+            SearchPanel::deploy(workspace, action, window, cx);
+            return;
+        }
+
         let existing = workspace
             .active_pane()
             .read(cx)
@@ -1703,6 +1725,35 @@ impl ProjectSearchView {
             .find_map(|item| item.downcast::<ProjectSearchView>());
 
         Self::existing_or_new_search(workspace, existing, action, window, cx);
+    }
+
+    /// Opens a project search tab that shows the results of an existing search,
+    /// such as the one in the search panel.
+    pub(crate) fn open_in_pane(
+        workspace: &mut Workspace,
+        search: Entity<ProjectSearch>,
+        settings: ProjectSearchSettings,
+        included_files: String,
+        excluded_files: String,
+        window: &mut Window,
+        cx: &mut Context<Workspace>,
+    ) {
+        let weak_workspace = cx.entity().downgrade();
+        let search_view = cx.new(|cx| {
+            let search_view =
+                ProjectSearchView::new(weak_workspace, search, window, cx, Some(settings));
+            search_view
+                .included_files_editor
+                .update(cx, |editor, cx| editor.set_text(included_files, window, cx));
+            search_view
+                .excluded_files_editor
+                .update(cx, |editor, cx| editor.set_text(excluded_files, window, cx));
+            search_view
+        });
+        workspace.add_item_to_active_pane(Box::new(search_view.clone()), None, true, window, cx);
+        search_view.update(cx, |search_view, cx| {
+            search_view.focus_results_editor(window, cx)
+        });
     }
 
     fn search_in_new(
@@ -1771,19 +1822,7 @@ impl ProjectSearchView {
         window: &mut Window,
         cx: &mut Context<Workspace>,
     ) {
-        let query_seed = workspace.active_item(cx).and_then(|item| {
-            if let Some(buffer_search_query) = buffer_search_query(workspace, item.as_ref(), cx) {
-                return Some(QuerySeed::Query(buffer_search_query));
-            }
-
-            let editor = item.act_as::<Editor>(cx)?;
-            let query = editor.query_suggestion(None, window, cx);
-            if query.is_empty() {
-                None
-            } else {
-                Some(QuerySeed::Text(query))
-            }
-        });
+        let query_seed = query_seed(workspace, window, cx);
 
         let search = if let Some(existing) = existing {
             workspace.activate_item(&existing, true, true, window, cx);
@@ -2581,6 +2620,26 @@ impl QuerySeed {
             QuerySeed::Text(text) if options.contains(SearchOptions::REGEX) => regex::escape(&text),
             QuerySeed::Text(text) => text,
         }
+    }
+}
+
+/// The query a new project search starts with: the buffer search query if that
+/// bar is focused, otherwise the selection or the word under the cursor.
+pub(crate) fn query_seed(
+    workspace: &mut Workspace,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) -> Option<QuerySeed> {
+    let item = workspace.active_item(cx)?;
+    if let Some(buffer_search_query) = buffer_search_query(workspace, item.as_ref(), cx) {
+        return Some(QuerySeed::Query(buffer_search_query));
+    }
+    let editor = item.act_as::<Editor>(cx)?;
+    let query = editor.query_suggestion(None, window, cx);
+    if query.is_empty() {
+        None
+    } else {
+        Some(QuerySeed::Text(query))
     }
 }
 

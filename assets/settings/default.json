@@ -251,6 +251,9 @@
   //
   // Default: true
   "zoomed_padding": true,
+  // Whether to draw the docks and the editor area as separate rounded cards
+  // with gaps between them, like VS Code's modern layout.
+  "modern_ui": true,
   // Window title template.
   // Available variables are ${projectName}, ${fileName}, ${filePath},
   // ${relativePath}, ${fileStem}, ${remoteName}, ${remoteHost},
@@ -1008,6 +1011,14 @@
       // Whether to automatically open files dropped from external sources.
       "on_drop": true,
     },
+  },
+  "search_panel": {
+    // Whether to show the search panel button in the activity bar
+    "button": true,
+    // Default width of the search panel.
+    "default_width": 300,
+    // Where to dock the search panel. Can be 'left' or 'right'.
+    "dock": "left",
   },
   "outline_panel": {
     // Whether to show the outline panel button in the status bar
@@ -2026,6 +2037,18 @@
     // 1. hour12
     // 2. hour24
     "hour_format": "hour12",
+  },
+  // Activity bar-related settings.
+  "activity_bar": {
+    // Whether to show the activity bar. It holds the buttons for the left
+    // and right dock panels, like the activity bar in VS Code.
+    "show": true,
+    // Where the activity bar is shown: "left", "right", or "top" (a horizontal
+    // bar at the top of the left dock, like Cursor).
+    "position": "left",
+    // Size of the icons on a vertical activity bar, in pixels (12 to 48). The
+    // bar grows or shrinks to fit them. The top bar always matches the tab bar.
+    // "icon_size": 20,
   },
   // Status bar-related settings.
   "status_bar": {

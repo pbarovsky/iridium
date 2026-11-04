@@ -453,6 +453,22 @@
     },
   },
   {
+    "context": "SearchPanel",
+    "bindings": {
+      "ctrl-shift-j": "project_search::ToggleFilters",
+      "alt-c": "search::ToggleCaseSensitive",
+      "alt-w": "search::ToggleWholeWord",
+      "alt-r": "search::ToggleRegex",
+      "ctrl-alt-enter": "search::ReplaceAll",
+      "ctrl-shift-1": "search::ReplaceNext",
+      "ctrl-enter": "search_panel::OpenInEditor",
+      "left": "search_panel::CollapseSelectedEntry",
+      "right": "search_panel::ExpandSelectedEntry",
+      "ctrl-left": "search_panel::CollapseAllEntries",
+      "ctrl-right": "search_panel::ExpandAllEntries",
+    },
+  },
+  {
     "context": "ProjectSearchBar > Editor",
     "bindings": {
       "up": "search::PreviousHistoryQuery",

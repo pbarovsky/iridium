@@ -1763,6 +1763,9 @@ impl SearchableItem for Editor {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A buffer search takes over from the search panel's highlights, so the
+        // two sets of matches don't show at once.
+        self.clear_background_highlights(HighlightKey::SearchPanelMatches, cx);
         let existing_range = self
             .background_highlights
             .get(&HighlightKey::BufferSearchHighlights)

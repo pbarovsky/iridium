@@ -204,6 +204,7 @@ pub struct SettingsContent {
     pub tab_bar: Option<TabBarSettingsContent>,
     pub tab_switcher: Option<TabSwitcherSettingsContent>,
     pub status_bar: Option<StatusBarSettingsContent>,
+    pub activity_bar: Option<ActivityBarSettingsContent>,
 
     pub preview_tabs: Option<PreviewTabsSettingsContent>,
 
@@ -274,6 +275,9 @@ pub struct SettingsContent {
     pub copilot: Option<CopilotSettingsContent>,
 
     pub outline_panel: Option<OutlinePanelSettingsContent>,
+
+    /// Configuration for the search panel.
+    pub search_panel: Option<SearchPanelSettingsContent>,
 
     pub project_panel: Option<ProjectPanelSettingsContent>,
 
@@ -405,11 +409,11 @@ impl SettingsContent {
 fallible_options::flattened_deserialize!(SettingsContent {
     sections: { project, theme, extension, workspace, editor, remote },
     options: {
-        call_hierarchy, command_palette, file_finder, git_panel, tabs, tab_bar, tab_switcher, status_bar, preview_tabs, agent,
+        call_hierarchy, command_palette, file_finder, git_panel, tabs, tab_bar, tab_switcher, status_bar, activity_bar, preview_tabs, agent,
         agent_servers, audio, auto_update, base_keymap, collaboration_panel, debugger, diagnostics,
         git,
         global_lsp_settings, image_viewer, markdown_preview, repl, helix_mode, hide_mouse,
-        journal, log, line_indicator_format, language_models, copilot, outline_panel, project_panel,
+        journal, log, line_indicator_format, language_models, copilot, outline_panel, search_panel, project_panel,
         node, proxy, reduce_motion, server_url, credentials_url, session, telemetry, terminal,
         title_bar, vim_mode, calls, which_key, vim, modeline_lines, feature_flags,
         instrumentation,
@@ -1203,6 +1207,23 @@ pub enum HourFormat {
     #[default]
     Hour12,
     Hour24,
+}
+
+#[with_fallible_options]
+#[derive(Clone, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug, PartialEq)]
+pub struct SearchPanelSettingsContent {
+    /// Whether to show the search panel button in the activity bar.
+    ///
+    /// Default: true
+    pub button: Option<bool>,
+    /// Customize default width (in pixels) taken by the search panel
+    ///
+    /// Default: 300
+    pub default_width: Option<PixelSetting>,
+    /// The position of the search panel
+    ///
+    /// Default: left
+    pub dock: Option<DockSide>,
 }
 
 #[with_fallible_options]

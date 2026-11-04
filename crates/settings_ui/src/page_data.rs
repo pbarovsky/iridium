@@ -5320,7 +5320,7 @@ fn window_and_layout_page() -> SettingsPage {
         ]
     }
 
-    fn pane_modifiers_section() -> [SettingsPageItem; 5] {
+    fn pane_modifiers_section() -> [SettingsPageItem; 6] {
         [
             SettingsPageItem::SectionHeader("Pane Modifiers"),
             SettingsPageItem::SettingItem(SettingItem {
@@ -5382,6 +5382,20 @@ fn window_and_layout_page() -> SettingsPage {
                     pick: |settings_content| settings_content.workspace.zoomed_padding.as_ref(),
                     write: |settings_content, value, _| {
                         settings_content.workspace.zoomed_padding = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Modern UI",
+                description: "Draw the docks and the editor area as separate rounded cards, like VS Code's modern layout.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("modern_ui"),
+                    pick: |settings_content| settings_content.workspace.modern_ui.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.workspace.modern_ui = value;
                     },
                 }),
                 metadata: None,

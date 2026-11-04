@@ -99,6 +99,7 @@ pub struct ExtensionCard {
     details: ExtensionCardDetails,
     actions: ExtensionCardActions,
     context_menu: Option<ContextMenuBuilder>,
+    compact: bool,
 }
 
 impl ExtensionCard {
@@ -149,6 +150,7 @@ impl ExtensionCard {
             details,
             actions,
             context_menu: None,
+            compact: false,
         }
     }
 
@@ -173,6 +175,7 @@ impl ExtensionCard {
             details,
             actions,
             context_menu: None,
+            compact: false,
         }
     }
 
@@ -399,6 +402,13 @@ impl ExtensionCard {
         }
     }
 
+    /// Renders the card as a dense list row that fits a narrow side panel, like
+    /// the extensions view in VS Code.
+    pub fn compact(mut self, compact: bool) -> Self {
+        self.compact = compact;
+        self
+    }
+
     pub fn repository_icon(mut self, icon: IconName) -> Self {
         self.details.repository_icon = icon;
         self
@@ -593,10 +603,14 @@ impl Component for ExtensionCard {
 
 impl RenderOnce for ExtensionCard {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        if self.compact {
+            return self.render_compact(cx).into_any_element();
+        }
         let Self {
             details,
             actions,
             context_menu,
+            compact: _,
         } = self;
         let ExtensionCardDetails {
             id,
@@ -618,159 +632,289 @@ impl RenderOnce for ExtensionCard {
         let context_menu_extension_id = id;
         let context_menu_authors = authors.clone();
 
-        div().w_full().child(
-            v_flex()
-                .mt_4()
-                .w_full()
-                .h(rems_from_px(110_f32))
-                .p_3()
-                .gap_2()
-                .bg(cx.theme().colors().elevated_surface_background.opacity(0.5))
-                .border_1()
-                .border_color(cx.theme().colors().border_variant)
-                .rounded_md()
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .justify_between()
-                        .child(
-                            h_flex()
-                                .flex_shrink_1()
-                                .min_w_0()
-                                .overflow_hidden()
-                                .whitespace_nowrap()
-                                .gap_2()
-                                .child(Headline::new(name).size(HeadlineSize::Small))
-                                .child(
-                                    Headline::new(if is_dev {
-                                        format!("v{version} (dev)")
-                                    } else {
-                                        format!("v{version}")
-                                    })
-                                    .size(HeadlineSize::XSmall)
-                                    .color(Color::Muted),
-                                )
-                                .children(installed_version.map(|installed_version| {
-                                    Headline::new(format!("(v{installed_version} installed)"))
-                                        .size(HeadlineSize::XSmall)
-                                }))
-                                .when(!provided_features.is_empty(), |parent| {
-                                    parent.child(
-                                        h_flex()
-                                            .gap_1()
-                                            .children(provided_features.into_iter().map(Chip::new)),
-                                    )
-                                }),
-                        )
-                        .child(
-                            h_flex()
-                                .flex_shrink_0()
-                                .gap_1()
-                                .children(actions.into_iter().flatten()),
-                        ),
-                )
-                .child(
-                    h_flex()
-                        .gap_2()
-                        .justify_between()
-                        .children(description.map(|description| {
-                            Label::new(description)
-                                .size(LabelSize::Small)
-                                .color(Color::Default)
-                                .truncate()
-                        }))
-                        .children(download_count.map(|download_count| {
-                            Label::new(format!(
-                                "Downloads: {}",
-                                format_number_with_commas(u128::from(download_count))
-                            ))
-                            .size(LabelSize::Small)
-                        })),
-                )
-                .child(
-                    h_flex()
-                        .min_w_0()
-                        .w_full()
-                        .justify_between()
-                        .child(
-                            h_flex()
-                                .min_w_0()
-                                .gap_1()
-                                .child(
-                                    Icon::new(IconName::Person)
-                                        .size(IconSize::XSmall)
-                                        .color(Color::Muted),
-                                )
-                                .child(
-                                    Label::new(authors)
-                                        .size(LabelSize::Small)
-                                        .color(Color::Muted)
-                                        .truncate(),
-                                ),
-                        )
-                        .child(
-                            h_flex()
-                                .gap_1()
-                                .flex_shrink_0()
-                                .when_some(repository_url, |this, repository_url| {
-                                    let repository_url_for_tooltip = repository_url.clone();
-                                    this.child(
-                                        IconButton::new(repository_button_id, repository_icon)
-                                            .icon_size(IconSize::Small)
-                                            .tooltip(move |_, cx| {
-                                                Tooltip::with_meta(
-                                                    "Visit Extension Repository",
-                                                    None,
-                                                    repository_url_for_tooltip.clone(),
-                                                    cx,
-                                                )
-                                            })
-                                            .on_click(move |_, _, cx| {
-                                                cx.open_url(&repository_url);
-                                            }),
-                                    )
-                                })
-                                .when_some(context_menu, |this, context_menu| {
-                                    this.child(
-                                        PopoverMenu::new(context_menu_button_id.clone())
-                                            .trigger(
-                                                IconButton::new(
-                                                    context_menu_button_id,
-                                                    IconName::Ellipsis,
-                                                )
-                                                .icon_size(IconSize::Small),
-                                            )
-                                            .anchor(Anchor::TopRight)
-                                            .offset(Point {
-                                                x: px(0.0),
-                                                y: px(2.0),
-                                            })
-                                            .menu(move |window, cx| {
-                                                context_menu(
-                                                    context_menu_extension_id.clone(),
-                                                    context_menu_authors.clone(),
-                                                    window,
-                                                    cx,
-                                                )
-                                            }),
-                                    )
-                                }),
-                        ),
-                )
-                .when(is_overridden, |card| {
-                    card.child(
+        div()
+            .w_full()
+            .child(
+                v_flex()
+                    .mt_4()
+                    .w_full()
+                    .h(rems_from_px(110_f32))
+                    .p_3()
+                    .gap_2()
+                    .bg(cx.theme().colors().elevated_surface_background.opacity(0.5))
+                    .border_1()
+                    .border_color(cx.theme().colors().border_variant)
+                    .rounded_md()
+                    .child(
                         h_flex()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .block_mouse_except_scroll()
-                            .cursor_default()
-                            .size_full()
-                            .justify_center()
-                            .bg(cx.theme().colors().elevated_surface_background.alpha(0.8))
-                            .child(Label::new("Overridden by dev extension.")),
+                            .gap_2()
+                            .justify_between()
+                            .child(
+                                h_flex()
+                                    .flex_shrink_1()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .whitespace_nowrap()
+                                    .gap_2()
+                                    .child(Headline::new(name).size(HeadlineSize::Small))
+                                    .child(
+                                        Headline::new(if is_dev {
+                                            format!("v{version} (dev)")
+                                        } else {
+                                            format!("v{version}")
+                                        })
+                                        .size(HeadlineSize::XSmall)
+                                        .color(Color::Muted),
+                                    )
+                                    .children(installed_version.map(|installed_version| {
+                                        Headline::new(format!("(v{installed_version} installed)"))
+                                            .size(HeadlineSize::XSmall)
+                                    }))
+                                    .when(!provided_features.is_empty(), |parent| {
+                                        parent.child(
+                                            h_flex().gap_1().children(
+                                                provided_features.into_iter().map(Chip::new),
+                                            ),
+                                        )
+                                    }),
+                            )
+                            .child(
+                                h_flex()
+                                    .flex_shrink_0()
+                                    .gap_1()
+                                    .children(actions.into_iter().flatten()),
+                            ),
                     )
-                }),
-        )
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .justify_between()
+                            .children(description.map(|description| {
+                                Label::new(description)
+                                    .size(LabelSize::Small)
+                                    .color(Color::Default)
+                                    .truncate()
+                            }))
+                            .children(download_count.map(|download_count| {
+                                Label::new(format!(
+                                    "Downloads: {}",
+                                    format_number_with_commas(u128::from(download_count))
+                                ))
+                                .size(LabelSize::Small)
+                            })),
+                    )
+                    .child(
+                        h_flex()
+                            .min_w_0()
+                            .w_full()
+                            .justify_between()
+                            .child(
+                                h_flex()
+                                    .min_w_0()
+                                    .gap_1()
+                                    .child(
+                                        Icon::new(IconName::Person)
+                                            .size(IconSize::XSmall)
+                                            .color(Color::Muted),
+                                    )
+                                    .child(
+                                        Label::new(authors)
+                                            .size(LabelSize::Small)
+                                            .color(Color::Muted)
+                                            .truncate(),
+                                    ),
+                            )
+                            .child(
+                                h_flex()
+                                    .gap_1()
+                                    .flex_shrink_0()
+                                    .when_some(repository_url, |this, repository_url| {
+                                        let repository_url_for_tooltip = repository_url.clone();
+                                        this.child(
+                                            IconButton::new(repository_button_id, repository_icon)
+                                                .icon_size(IconSize::Small)
+                                                .tooltip(move |_, cx| {
+                                                    Tooltip::with_meta(
+                                                        "Visit Extension Repository",
+                                                        None,
+                                                        repository_url_for_tooltip.clone(),
+                                                        cx,
+                                                    )
+                                                })
+                                                .on_click(move |_, _, cx| {
+                                                    cx.open_url(&repository_url);
+                                                }),
+                                        )
+                                    })
+                                    .when_some(context_menu, |this, context_menu| {
+                                        this.child(
+                                            PopoverMenu::new(context_menu_button_id.clone())
+                                                .trigger(
+                                                    IconButton::new(
+                                                        context_menu_button_id,
+                                                        IconName::Ellipsis,
+                                                    )
+                                                    .icon_size(IconSize::Small),
+                                                )
+                                                .anchor(Anchor::TopRight)
+                                                .offset(Point {
+                                                    x: px(0.0),
+                                                    y: px(2.0),
+                                                })
+                                                .menu(move |window, cx| {
+                                                    context_menu(
+                                                        context_menu_extension_id.clone(),
+                                                        context_menu_authors.clone(),
+                                                        window,
+                                                        cx,
+                                                    )
+                                                }),
+                                        )
+                                    }),
+                            ),
+                    )
+                    .when(is_overridden, |card| {
+                        card.child(
+                            h_flex()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .block_mouse_except_scroll()
+                                .cursor_default()
+                                .size_full()
+                                .justify_center()
+                                .bg(cx.theme().colors().elevated_surface_background.alpha(0.8))
+                                .child(Label::new("Overridden by dev extension.")),
+                        )
+                    }),
+            )
+            .into_any_element()
+    }
+}
+
+impl ExtensionCard {
+    fn render_compact(self, cx: &App) -> impl IntoElement + use<> {
+        let Self {
+            details,
+            actions,
+            context_menu,
+            compact: _,
+        } = self;
+        let ExtensionCardDetails {
+            id,
+            name,
+            version,
+            description,
+            authors,
+            source,
+            ..
+        } = details;
+        let download_count = source.download_count();
+        let is_dev = source.is_dev();
+        let is_overridden = source.is_overridden();
+        let context_menu_button_id = SharedString::from(format!("more-{id}"));
+        let context_menu_authors = authors.clone();
+        let colors = cx.theme().colors();
+
+        v_flex()
+            .id(SharedString::from(format!("extension-row-{id}")))
+            .relative()
+            .w_full()
+            .h(rems_from_px(86_f32))
+            .px_2()
+            .py_1p5()
+            .gap_0p5()
+            .rounded_sm()
+            .hover(|style| style.bg(colors.ghost_element_hover))
+            .child(
+                h_flex()
+                    .w_full()
+                    .gap_1()
+                    .justify_between()
+                    .child(
+                        h_flex()
+                            .min_w_0()
+                            .gap_1()
+                            .overflow_hidden()
+                            .child(Label::new(name).size(LabelSize::Large).truncate())
+                            .child(
+                                Label::new(if is_dev {
+                                    format!("v{version} (dev)")
+                                } else {
+                                    format!("v{version}")
+                                })
+                                .size(LabelSize::Small)
+                                .color(Color::Muted),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .flex_shrink_0()
+                            .gap_1()
+                            .children(actions.into_iter().flatten()),
+                    ),
+            )
+            .children(
+                description
+                    .map(|description| Label::new(description).color(Color::Muted).truncate()),
+            )
+            .child(
+                h_flex()
+                    .w_full()
+                    .min_w_0()
+                    .gap_1()
+                    .justify_between()
+                    .child(
+                        Label::new(authors)
+                            .size(LabelSize::Small)
+                            .color(Color::Muted)
+                            .truncate(),
+                    )
+                    .child(
+                        h_flex()
+                            .flex_shrink_0()
+                            .gap_1()
+                            .children(download_count.map(|download_count| {
+                                Label::new(format_number_with_commas(u128::from(download_count)))
+                                    .size(LabelSize::Small)
+                                    .color(Color::Muted)
+                            }))
+                            .when_some(context_menu, |this, context_menu| {
+                                this.child(
+                                    PopoverMenu::new(context_menu_button_id.clone())
+                                        .trigger(
+                                            IconButton::new(
+                                                context_menu_button_id,
+                                                IconName::Ellipsis,
+                                            )
+                                            .icon_size(IconSize::Small),
+                                        )
+                                        .anchor(Anchor::TopRight)
+                                        .menu(move |window, cx| {
+                                            context_menu(
+                                                id.clone(),
+                                                context_menu_authors.clone(),
+                                                window,
+                                                cx,
+                                            )
+                                        }),
+                                )
+                            }),
+                    ),
+            )
+            .when(is_overridden, |row| {
+                row.child(
+                    h_flex()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .block_mouse_except_scroll()
+                        .cursor_default()
+                        .size_full()
+                        .justify_center()
+                        .bg(colors.elevated_surface_background.alpha(0.8))
+                        .child(Label::new("Overridden by dev extension.").size(LabelSize::Small)),
+                )
+            })
     }
 }

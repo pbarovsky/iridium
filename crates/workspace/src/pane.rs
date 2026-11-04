@@ -47,8 +47,8 @@ use std::{
 use theme_settings::ThemeSettings;
 use ui::{
     ContextMenu, ContextMenuEntry, ContextMenuItem, DecoratedIcon, IconButtonShape, IconDecoration,
-    IconDecorationKind, Indicator, PopoverMenu, PopoverMenuHandle, Tab, TabBar, TabPosition,
-    Tooltip, prelude::*, right_click_menu,
+    IconDecorationKind, Indicator, PopoverMenu, PopoverMenuHandle, Tab, TabBar, Tooltip,
+    prelude::*, right_click_menu,
 };
 use util::{
     ResultExt, debug_panic, markdown::MarkdownInlineCode, maybe, paths::PathStyle,
@@ -2905,10 +2905,7 @@ impl Pane {
         let indicator = render_item_indicator(item.boxed_clone(), cx);
         let tab_tooltip_content = item.tab_tooltip_content(cx);
         let item_id = item.item_id();
-        let is_first_item = ix == 0;
-        let is_last_item = ix == self.items.len() - 1;
         let is_pinned = self.is_tab_pinned(ix);
-        let position_relative_to_active_item = ix.cmp(&self.active_item_index);
 
         let read_only_toggle = |toggleable: bool| {
             IconButton::new("toggle_read_only", IconName::FileLock)
@@ -2939,14 +2936,8 @@ impl Pane {
         let has_file_icon = icon.is_some();
 
         let capability = item.capability(cx);
+        let has_indicator = indicator.is_some();
         let tab = Tab::new(ix)
-            .position(if is_first_item {
-                TabPosition::First
-            } else if is_last_item {
-                TabPosition::Last
-            } else {
-                TabPosition::Middle(position_relative_to_active_item)
-            })
             .close_side(match close_side {
                 ClosePosition::Left => ui::TabCloseSide::Start,
                 ClosePosition::Right => ui::TabCloseSide::End,
@@ -3052,7 +3043,10 @@ impl Pane {
                     };
                     end_slot_tooltip_text = "Close Tab";
                     match show_close_button {
-                        ShowCloseButton::Always => IconButton::new("close tab", IconName::Close),
+                        // The close button shares its slot with the dirty indicator, so it
+                        // only covers the indicator while the tab is hovered.
+                        ShowCloseButton::Always => IconButton::new("close tab", IconName::Close)
+                            .when(has_indicator, |button| button.visible_on_hover("")),
                         ShowCloseButton::Hover => {
                             IconButton::new("close tab", IconName::Close).visible_on_hover("")
                         }
@@ -3087,9 +3081,16 @@ impl Pane {
             .child(
                 h_flex()
                     .id(("pane-tab-content", ix))
-                    .gap_1()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(3.))
+                    // Without an icon the label would sit closer to the left edge
+                    // than the close button sits to the right one.
+                    .when(!has_file_icon && capability.editable(), |this| {
+                        this.pl(px(4.))
+                    })
                     .children(if let Some(icon) = icon {
-                        Some(icon)
+                        Some(tab_icon_slot(icon, is_active).into_any_element())
                     } else if !capability.editable() {
                         Some(read_only_toggle(capability == Capability::Read).into_any_element())
                     } else {
@@ -3657,13 +3658,14 @@ impl Pane {
                 // The border adds 1-2px which can push max_offset back to 0, creating a loop.
                 let is_scrollable = max_scroll > px(2.0);
                 let has_active_unpinned_tab = self.active_item_index >= self.pinned_tab_count;
-                h_flex()
-                    .children(pinned_tabs)
-                    .when(is_scrollable && is_scrolled, |this| {
+                h_flex().gap_1().pl_1().children(pinned_tabs).when(
+                    is_scrollable && is_scrolled,
+                    |this| {
                         this.when(has_active_unpinned_tab, |this| this.border_r_2())
                             .when(!has_active_unpinned_tab, |this| this.border_r_1())
                             .border_color(cx.theme().colors().border)
-                    })
+                    },
+                )
             }))
             .child(self.render_unpinned_tabs_container(unpinned_tabs, tab_count, cx));
         tab_bar.into_any_element()
@@ -3693,6 +3695,8 @@ impl Pane {
                     .debug_selector(|| "pinned_tabs_row".into())
                     .overflow_x_scroll()
                     .w_full()
+                    .gap_1()
+                    .px_1()
                     .children(pinned_tabs)
                     .child(self.render_pinned_tab_bar_drop_target(cx)),
             );
@@ -3720,6 +3724,8 @@ impl Pane {
             .id("unpinned tabs")
             .overflow_x_scroll()
             .w_full()
+            .gap_1()
+            .px_1()
             .track_scroll(&self.tab_bar_scroll_handle)
             .on_scroll(cx.listener(|this, _, _, _| {
                 this.suppress_scroll = true;
@@ -5085,6 +5091,15 @@ pub fn tab_details(items: &[Box<dyn ItemHandle>], _window: &Window, cx: &App) ->
     util::disambiguate::compute_disambiguation_details(items, |item, detail| {
         item.tab_content_text(detail, cx)
     })
+}
+
+fn tab_icon_slot(icon: AnyElement, is_active: bool) -> impl IntoElement {
+    h_flex()
+        .flex_none()
+        .size(px(18.))
+        .justify_center()
+        .when(!is_active, |slot| slot.opacity(0.78))
+        .child(icon)
 }
 
 pub fn render_item_indicator(item: Box<dyn ItemHandle>, cx: &App) -> Option<Indicator> {

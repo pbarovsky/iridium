@@ -1526,7 +1526,7 @@ impl EditorElement {
                 (supports_git_diff_markers && scrollbar_settings.git_diff && snapshot.buffer_snapshot().has_diff_hunks())
                 ||
                 // Buffer Search Results
-                (is_singleton && scrollbar_settings.search_results && editor.has_background_highlights(HighlightKey::BufferSearchHighlights))
+                (is_singleton && scrollbar_settings.search_results && (editor.has_background_highlights(HighlightKey::BufferSearchHighlights) || editor.has_background_highlights(HighlightKey::SearchPanelMatches)))
                 ||
                 // Selected Text Occurrences
                 (is_singleton && scrollbar_settings.selected_text && editor.has_background_highlights(HighlightKey::SelectedTextHighlight))

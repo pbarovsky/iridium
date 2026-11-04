@@ -13,7 +13,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use ui::{Tab, TabBar, TabPosition, prelude::*};
+use ui::{Tab, TabBar, prelude::*};
 use util::ResultExt;
 use workspace::AppState;
 
@@ -458,13 +458,6 @@ impl Render for WatcherDebug {
             .child(
                 TabBar::new("watcher-tabs").children(WatcherTab::ALL.map(|tab| {
                     Tab::new(tab.label())
-                        .position(match tab {
-                            WatcherTab::RawEvents => TabPosition::First,
-                            WatcherTab::WatchRoots => {
-                                TabPosition::Middle(tab.cmp(&self.active_tab))
-                            }
-                            WatcherTab::ScanExclusions => TabPosition::Last,
-                        })
                         .toggle_state(self.active_tab == tab)
                         .child(Label::new(tab.label()))
                         .on_click(

@@ -1,4 +1,5 @@
 pub mod active_file_name;
+pub mod activity_bar;
 pub mod dock;
 pub mod history_manager;
 pub mod invalid_item_view;
@@ -41,6 +42,7 @@ pub use path_list::{PathList, SerializedPathList};
 pub use remote::RemoteConnectionIdentity;
 pub use toast_layer::{ToastAction, ToastLayer, ToastView};
 
+use activity_bar::ActivityBar;
 use agent_settings::AgentSettings;
 use anyhow::{Context as _, Result, anyhow};
 use client::{
@@ -157,9 +159,9 @@ use util::{
 };
 use uuid::Uuid;
 pub use workspace_settings::{
-    AccessibleMode, AutosaveSetting, BottomDockLayout, EncodingDisplayOptions, FocusFollowsMouse,
-    RestoreOnStartupBehavior, StatusBarSettings, TabBarSettings, WorkspaceSettings,
-    closing_last_window_quits_app, observe_accessible_mode,
+    AccessibleMode, ActivityBarSettings, AutosaveSetting, BottomDockLayout, EncodingDisplayOptions,
+    FocusFollowsMouse, RestoreOnStartupBehavior, StatusBarSettings, TabBarSettings,
+    WorkspaceSettings, closing_last_window_quits_app, observe_accessible_mode,
 };
 use zed_actions::{Spawn, feedback::FileBugReport, theme::ToggleMode};
 
@@ -1591,6 +1593,7 @@ pub struct Workspace {
     last_active_center_pane: Option<WeakEntity<Pane>>,
     last_active_view_id: Option<proto::ViewId>,
     status_bar: Entity<StatusBar>,
+    activity_bar: Entity<ActivityBar>,
     pub(crate) modal_layer: Entity<ModalLayer>,
     toast_layer: Entity<ToastLayer>,
     titlebar_item: Option<AnyView>,
@@ -1972,6 +1975,14 @@ impl Workspace {
         let left_dock_buttons = cx.new(|cx| PanelButtons::new(left_dock.clone(), cx));
         let bottom_dock_buttons = cx.new(|cx| PanelButtons::new(bottom_dock.clone(), cx));
         let right_dock_buttons = cx.new(|cx| PanelButtons::new(right_dock.clone(), cx));
+        let activity_bar = cx.new(|cx| {
+            ActivityBar::new(
+                weak_handle.clone(),
+                left_dock.clone(),
+                right_dock.clone(),
+                cx,
+            )
+        });
         let multi_workspace = window
             .root::<MultiWorkspace>()
             .flatten()
@@ -1979,9 +1990,9 @@ impl Workspace {
         let status_bar = cx.new(|cx| {
             let mut status_bar =
                 StatusBar::new(&center_pane.clone(), multi_workspace.clone(), window, cx);
-            status_bar.add_left_item(left_dock_buttons, window, cx);
             status_bar.add_right_item(right_dock_buttons, window, cx);
             status_bar.add_right_item(bottom_dock_buttons, window, cx);
+            status_bar.add_right_item(left_dock_buttons, window, cx);
             status_bar
         });
 
@@ -2097,6 +2108,7 @@ impl Workspace {
             last_active_center_pane: Some(center_pane.downgrade()),
             last_active_view_id: None,
             status_bar,
+            activity_bar,
             modal_layer,
             toast_layer,
             titlebar_item: None,
@@ -2884,6 +2896,25 @@ impl Workspace {
 
     pub fn status_bar(&self) -> &Entity<StatusBar> {
         &self.status_bar
+    }
+
+    pub fn activity_bar(&self) -> &Entity<ActivityBar> {
+        &self.activity_bar
+    }
+
+    /// The window edge the activity bar runs along, if it is shown as a vertical
+    /// bar there. The top activity bar is drawn inside the left dock instead.
+    fn activity_bar_edge(&self, cx: &App) -> Option<settings::ActivityBarPosition> {
+        activity_bar::effective_position(cx)
+            .filter(|position| *position != settings::ActivityBarPosition::Top)
+    }
+
+    fn activity_bar_width_on(&self, edge: settings::ActivityBarPosition, cx: &App) -> Pixels {
+        if self.activity_bar_edge(cx) == Some(edge) {
+            activity_bar::bar_width(cx)
+        } else {
+            Pixels::ZERO
+        }
     }
 
     pub fn set_sidebar_focus_handle(&mut self, handle: Option<FocusHandle>) {
@@ -8890,6 +8921,9 @@ impl Workspace {
             .flex()
             .overflow_hidden()
             .flex_none()
+            .when(dock_is_open && dock::modern_ui_enabled(cx), |this| {
+                this.p(dock::MODERN_UI_GAP)
+            })
             .child(dock.clone())
             .children(leader_border);
 
@@ -9097,13 +9131,28 @@ impl Workspace {
                 this.track_focus(&self.region_focus_handles.editor)
             })
             .size_full()
-            .child(self.center.render(
-                self.zoomed.as_ref(),
-                self.maximized_pane.as_ref(),
-                render_cx,
-                window,
-                cx,
-            ))
+            .map(|this| {
+                let card_corners = dock::modern_ui_enabled(cx)
+                    .then(|| dock::modern_ui_card_corners(cx).into_any_element());
+                let center = self.center.render(
+                    self.zoomed.as_ref(),
+                    self.maximized_pane.as_ref(),
+                    render_cx,
+                    window,
+                    cx,
+                );
+                let Some(card_corners) = card_corners else {
+                    return this.child(center);
+                };
+                this.p(dock::MODERN_UI_GAP).child(
+                    div()
+                        .relative()
+                        .size_full()
+                        .overflow_hidden()
+                        .child(center)
+                        .child(card_corners),
+                )
+            })
     }
 
     pub fn for_window(window: &Window, cx: &App) -> Option<Entity<Workspace>> {
@@ -9893,16 +9942,22 @@ impl Render for Workspace {
                     .child(
                         div()
                             .id("workspace")
-                            .bg(colors.background)
+                            .map(|this| {
+                                if dock::modern_ui_enabled(cx) {
+                                    this.bg(dock::modern_ui_frame_color(cx))
+                                } else {
+                                    this.bg(colors.background)
+                                        .border_t_1()
+                                        .border_b_1()
+                                        .border_color(colors.border)
+                                }
+                            })
                             .relative()
                             .flex_1()
                             .w_full()
                             .flex()
                             .flex_col()
                             .overflow_hidden()
-                            .border_t_1()
-                            .border_b_1()
-                            .border_color(colors.border)
                             .child({
                                 let this = cx.entity();
                                 canvas(
@@ -9956,7 +10011,11 @@ impl Render for Workspace {
                                                 DockPosition::Left => {
                                                     workspace.resize_left_dock(
                                                         e.event.position.x
-                                                            - workspace.bounds.left(),
+                                                            - workspace.bounds.left()
+                                                            - workspace.activity_bar_width_on(
+                                                                settings::ActivityBarPosition::Left,
+                                                                cx,
+                                                            ),
                                                         window,
                                                         cx,
                                                     );
@@ -9964,6 +10023,10 @@ impl Render for Workspace {
                                                 DockPosition::Right => {
                                                     workspace.resize_right_dock(
                                                         workspace.bounds.right()
+                                                            - workspace.activity_bar_width_on(
+                                                                settings::ActivityBarPosition::Right,
+                                                                cx,
+                                                            )
                                                             - e.event.position.x,
                                                         window,
                                                         cx,
@@ -9983,7 +10046,18 @@ impl Render for Workspace {
                                     },
                                 ))
                             })
-                            .child({
+                            .child(
+                                h_flex()
+                                    .flex_1()
+                                    .w_full()
+                                    .min_h_0()
+                                    .overflow_hidden()
+                                    .when(
+                                        self.activity_bar_edge(cx)
+                                            == Some(settings::ActivityBarPosition::Left),
+                                        |this| this.child(self.activity_bar.clone()),
+                                    )
+                                    .child(
                                 match bottom_dock_layout {
                                     BottomDockLayout::Full => div()
                                         .flex()
@@ -10224,7 +10298,16 @@ impl Render for Workspace {
                                             cx,
                                         )),
                                 }
-                            })
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden(),
+                                    )
+                                    .when(
+                                        self.activity_bar_edge(cx)
+                                            == Some(settings::ActivityBarPosition::Right),
+                                        |this| this.child(self.activity_bar.clone()),
+                                    ),
+                            )
                             .children(self.zoomed.as_ref().and_then(|view| {
                                 let zoomed_view = view.upgrade()?;
                                 let zoomed_element = match zoomed_paddings {
