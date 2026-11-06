@@ -46,8 +46,6 @@ fn activity_icon(panel_key: &str) -> Option<IconName> {
         "OutlinePanel" => Some(IconName::ActivityOutline),
         "agent_panel" => Some(IconName::ActivityChat),
         "TerminalPanel" => Some(IconName::ActivityTerminal),
-        "CollaborationPanel" => Some(IconName::ActivityCollab),
-        "NotificationPanel" => Some(IconName::ActivityNotifications),
         _ => None,
     }
 }

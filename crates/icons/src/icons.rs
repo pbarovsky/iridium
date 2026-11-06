@@ -10,11 +10,9 @@ use strum::{EnumIter, EnumString, IntoStaticStr};
 pub enum IconName {
     AcpRegistry,
     ActivityChat,
-    ActivityCollab,
     ActivityDebug,
     ActivityExplorer,
     ActivityExtensions,
-    ActivityNotifications,
     ActivityOutline,
     ActivitySearch,
     ActivitySettings,

@@ -1573,9 +1573,8 @@ pub fn set_completion_provider(fs: Arc<dyn Fs>, cx: &mut App, provider: EditPred
 }
 
 pub fn get_available_providers(cx: &mut App) -> Vec<EditPredictionProvider> {
+    // Zed's own provider needs a zed.dev account, and this build can't sign in.
     let mut providers = Vec::new();
-
-    providers.push(EditPredictionProvider::Zed);
 
     let app_state = workspace::AppState::global(cx);
     if copilot::GlobalCopilotAuth::try_get_or_init(app_state, cx)

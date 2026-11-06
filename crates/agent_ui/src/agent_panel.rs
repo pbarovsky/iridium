@@ -109,6 +109,8 @@ const MIN_PANEL_WIDTH: Pixels = px(300.);
 const LAST_USED_AGENT_KEY: &str = "agent_panel__last_used_external_agent";
 const LAST_CREATED_ENTRY_KIND_KEY: &str = "agent_panel__last_created_entry_kind";
 const TERMINAL_AGENT_TELEMETRY_ID: &str = "terminal";
+/// The new-user onboarding card is a zed.dev sign-in and trial upsell.
+const SHOW_ZED_AI_ONBOARDING: bool = false;
 const TERMINAL_INIT_COMMAND_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
 const KNOWN_TERMINAL_AGENT_COMMANDS: &[&str] = &[
     "agent", // Unfortunately, both Cursor cli + grok
@@ -6288,6 +6290,11 @@ impl AgentPanel {
     }
 
     fn should_render_new_user_onboarding(&mut self, cx: &mut Context<Self>) -> bool {
+        // The onboarding card offers signing in to zed.dev, which this build
+        // can't do. Without a configured provider the thread asks to set one up.
+        if !SHOW_ZED_AI_ONBOARDING {
+            return false;
+        }
         if self
             .new_user_onboarding_upsell_dismissed
             .load(Ordering::Acquire)

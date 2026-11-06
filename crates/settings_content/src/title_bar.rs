@@ -107,9 +107,8 @@ pub struct TitleBarSettingsContent {
     ///
     /// Default: true
     pub show_project_items: Option<bool>,
-    /// Whether to show the sign in button in the title bar.
-    ///
-    /// Default: true
+    /// Ignored: this build has no sign in. Kept so existing settings files
+    /// that set it stay valid.
     pub show_sign_in: Option<bool>,
     /// Whether to show the user menu button in the title bar.
     ///

@@ -163,34 +163,15 @@ impl Settings for ProxySettings {
     }
 }
 
+/// Signing in is disabled (see [`Client::sign_in`]), so only signing out is
+/// offered: it still clears credentials stored by an earlier sign-in.
 pub fn init(client: &Arc<Client>, cx: &mut App) {
     let client = Arc::downgrade(client);
     cx.on_action({
-        let client = client.clone();
-        move |_: &SignIn, cx| {
-            if let Some(client) = client.upgrade() {
-                cx.spawn(async move |cx| client.sign_in_with_optional_connect(true, cx).await)
-                    .detach_and_log_err(cx);
-            }
-        }
-    })
-    .on_action({
-        let client = client.clone();
         move |_: &SignOut, cx| {
             if let Some(client) = client.upgrade() {
                 cx.spawn(async move |cx| {
                     client.sign_out(cx).await;
-                })
-                .detach();
-            }
-        }
-    })
-    .on_action({
-        let client = client;
-        move |_: &Reconnect, cx| {
-            if let Some(client) = client.upgrade() {
-                cx.spawn(async move |cx| {
-                    client.reconnect(cx);
                 })
                 .detach();
             }
@@ -546,9 +527,11 @@ pub struct TelemetrySettings {
 impl settings::Settings for TelemetrySettings {
     fn from_settings(content: &SettingsContent) -> Self {
         let telemetry = content.telemetry.as_ref().unwrap();
+        // This build never sends usage data or crash reports, whatever the
+        // settings say.
         Self {
-            diagnostics: telemetry.diagnostics.unwrap(),
-            metrics: telemetry.metrics.unwrap(),
+            diagnostics: false,
+            metrics: false,
             anthropic_retention: telemetry.anthropic_retention.unwrap(),
         }
     }
@@ -882,6 +865,12 @@ impl Client {
         try_provider: bool,
         cx: &AsyncApp,
     ) -> Result<Credentials> {
+        // This build has no account: it never signs in to zed.dev, so nothing is
+        // synced or stored remotely. Tests still sign in to their fake server.
+        if !cfg!(any(test, feature = "test-support")) {
+            anyhow::bail!("Signing in is not available in this build");
+        }
+
         let is_reauthenticating = if self.status().borrow().is_signed_out() {
             self.set_status(Status::Authenticating, cx);
             false
