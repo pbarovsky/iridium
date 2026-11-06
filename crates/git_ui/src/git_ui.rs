@@ -62,6 +62,7 @@ pub mod unstaged_diff;
 
 pub use blame_ui::GitBlameStatus;
 pub use conflict_view::MergeConflictIndicator;
+pub use remote_status_item::GitRemoteButton;
 
 pub fn init(cx: &mut App) {
     editor::set_blame_renderer(blame_ui::GitBlameRenderer, cx);
@@ -1712,5 +1713,93 @@ mod view_commit_tests {
             })
             .expect("fake git state should exist");
         assert_eq!(tagged_commit, Some(selected_commit.to_string()));
+    }
+}
+
+mod remote_status_item {
+    use crate::git_panel::GitPanel;
+    use gpui::{Entity, Subscription, WeakEntity};
+    use ui::{ContextMenu, PopoverMenuHandle, prelude::*};
+    use workspace::{HideStatusItem, StatusItemView, Workspace, item::ItemHandle};
+
+    /// The git panel's fetch/push/pull split button, repeated in the status bar
+    /// next to the branch name. It reflects the panel's state, so it shows the
+    /// same action and progress as the panel does.
+    pub struct GitRemoteButton {
+        workspace: WeakEntity<Workspace>,
+        git_panel: Option<Entity<GitPanel>>,
+        menu_handle: PopoverMenuHandle<ContextMenu>,
+        _subscriptions: Vec<Subscription>,
+    }
+
+    impl GitRemoteButton {
+        pub fn new(workspace: &Workspace, cx: &mut Context<Self>) -> Self {
+            let mut subscriptions = Vec::new();
+            // The git panel is added after the status bar, so look for it again
+            // whenever the workspace changes until it shows up.
+            if let Some(workspace_entity) = workspace.weak_handle().upgrade() {
+                subscriptions.push(cx.observe(&workspace_entity, |this, _, cx| {
+                    if this.git_panel.is_none() {
+                        this.find_git_panel(cx);
+                    }
+                }));
+            }
+            let mut this = Self {
+                workspace: workspace.weak_handle(),
+                git_panel: None,
+                menu_handle: PopoverMenuHandle::default(),
+                _subscriptions: subscriptions,
+            };
+            this.git_panel = workspace.panel::<GitPanel>(cx);
+            if let Some(git_panel) = this.git_panel.clone() {
+                this.observe_git_panel(&git_panel, cx);
+            }
+            this
+        }
+
+        fn find_git_panel(&mut self, cx: &mut Context<Self>) {
+            let Some(git_panel) = self
+                .workspace
+                .upgrade()
+                .and_then(|workspace| workspace.read(cx).panel::<GitPanel>(cx))
+            else {
+                return;
+            };
+            self.observe_git_panel(&git_panel, cx);
+            self.git_panel = Some(git_panel);
+            cx.notify();
+        }
+
+        fn observe_git_panel(&mut self, git_panel: &Entity<GitPanel>, cx: &mut Context<Self>) {
+            self._subscriptions
+                .push(cx.observe(git_panel, |_, _, cx| cx.notify()));
+        }
+    }
+
+    impl Render for GitRemoteButton {
+        fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let button = self.git_panel.as_ref().and_then(|git_panel| {
+                git_panel.read(cx).render_detached_remote_button(
+                    "status-bar-remote-button",
+                    self.menu_handle.clone(),
+                    cx,
+                )
+            });
+            div().flex_none().children(button)
+        }
+    }
+
+    impl StatusItemView for GitRemoteButton {
+        fn set_active_pane_item(
+            &mut self,
+            _active_pane_item: Option<&dyn ItemHandle>,
+            _window: &mut Window,
+            _cx: &mut Context<Self>,
+        ) {
+        }
+
+        fn hide_setting(&self, _: &App) -> Option<HideStatusItem> {
+            None
+        }
     }
 }

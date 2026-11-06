@@ -219,6 +219,7 @@ impl VsCodeSettings {
 
             outline_panel: self.outline_panel_settings_content(),
             search_panel: None,
+            extensions_panel: None,
             preview_tabs: self.preview_tabs_settings_content(),
             project: self.project_settings_content(),
             project_panel: self.project_panel_settings_content(),
@@ -859,6 +860,10 @@ impl VsCodeSettings {
         skip_default(StatusBarSettingsContent {
             show: self.read_bool("workbench.statusBar.visible"),
             show_active_file: None,
+            show_project_items: None,
+            show_worktree_name: None,
+            show_branch_name: None,
+            show_branch_status_icon: None,
             active_language_button: None,
             cursor_position_button: None,
             line_endings_button: None,
@@ -1139,7 +1144,6 @@ impl VsCodeSettings {
                 }
             }),
             zoomed_padding: None,
-            modern_ui: None,
             focus_follows_mouse: None,
         }
     }

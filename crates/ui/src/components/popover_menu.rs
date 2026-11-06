@@ -143,6 +143,7 @@ pub struct PopoverMenu<M: ManagedView> {
     trigger_handle: Option<PopoverMenuHandle<M>>,
     on_open: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
     full_width: bool,
+    allow_shrink: bool,
 }
 
 impl<M: ManagedView> PopoverMenu<M> {
@@ -158,11 +159,19 @@ impl<M: ManagedView> PopoverMenu<M> {
             trigger_handle: None,
             on_open: None,
             full_width: false,
+            allow_shrink: false,
         }
     }
 
     pub fn full_width(mut self, full_width: bool) -> Self {
         self.full_width = full_width;
+        self
+    }
+
+    /// Lets the trigger be narrower than its content when its container runs out
+    /// of room, for triggers that truncate their label.
+    pub fn allow_shrink(mut self, allow_shrink: bool) -> Self {
+        self.allow_shrink = allow_shrink;
         self
     }
 
@@ -410,6 +419,9 @@ impl<M: ManagedView> Element for PopoverMenu<M> {
                 let mut style = Style::default();
                 if self.full_width {
                     style.size = size(relative(1.).into(), Length::Auto);
+                }
+                if self.allow_shrink {
+                    style.min_size.width = px(0.).into();
                 }
 
                 let layout_id = window.request_layout(

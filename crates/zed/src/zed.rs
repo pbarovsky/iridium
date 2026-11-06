@@ -601,7 +601,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
         });
 
         let project_status_item = cx.new(|cx| title_bar::ProjectStatusItem::new(workspace, cx));
-        let search_button = cx.new(|_| search::search_status_button::SearchButton::new());
         let diagnostic_summary =
             cx.new(|cx| diagnostics::items::DiagnosticIndicator::new(workspace, cx));
         let active_file_name = cx.new(|_| workspace::active_file_name::ActiveFileName::new());
@@ -631,11 +630,14 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
         let line_ending_indicator =
             cx.new(|_| line_ending_selector::LineEndingIndicator::default());
         let git_blame_status = cx.new(|_| git_ui::GitBlameStatus::default());
+        let git_remote_button = cx.new(|cx| git_ui::GitRemoteButton::new(workspace, cx));
         let merge_conflict_indicator =
             cx.new(|cx| git_ui::MergeConflictIndicator::new(workspace, cx));
         workspace.status_bar().update(cx, |status_bar, cx| {
-            // As in VS Code, only the project, worktree and branch are on the left.
+            // As in VS Code, only the project, worktree and branch (with its
+            // fetch/push button) are on the left.
             status_bar.add_left_item(project_status_item, window, cx);
+            status_bar.add_left_item(git_remote_button, window, cx);
             status_bar.add_right_item(edit_prediction_ui, window, cx);
             status_bar.add_right_item(active_buffer_encoding, window, cx);
             status_bar.add_right_item(active_buffer_language, window, cx);
@@ -643,7 +645,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
             status_bar.add_right_item(line_ending_indicator, window, cx);
             status_bar.add_right_item(cursor_position, window, cx);
             status_bar.add_right_item(image_info, window, cx);
-            status_bar.add_right_item(search_button, window, cx);
             status_bar.add_right_item(lsp_button, window, cx);
             status_bar.add_right_item(diagnostic_summary, window, cx);
             status_bar.add_right_item(active_file_name, window, cx);

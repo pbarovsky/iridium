@@ -1,8 +1,6 @@
-use crate::dock::{
-    Dock, MODERN_UI_GAP, PanelHandle, activate_panel_button, modern_ui_card_corners,
-    modern_ui_enabled, panel_button_context_menu,
-};
-use crate::{ActivityBarSettings, Workspace};
+use crate::dock::{Dock, PanelHandle, activate_panel_button, panel_button_context_menu};
+use crate::{ActivityBarSettings, DeploySearch, UseAgenticLayout, UseClassicLayout, Workspace};
+use agent_settings::{AgentSettings, WindowLayout};
 use gpui::{
     Action, Anchor, AnyElement, App, Context, Entity, FocusHandle, IntoElement, ParentElement,
     Pixels, Render, SharedString, Styled, Subscription, Task, WeakEntity, Window, px,
@@ -10,8 +8,8 @@ use gpui::{
 use settings::{ActivityBarPosition, Settings as _, SettingsStore};
 use std::sync::Arc;
 use ui::{
-    ButtonSize, ContextMenu, CountBadge, Icon, IconButton, IconName, IconSize, PopoverMenu, Tab,
-    Tooltip, prelude::*, right_click_menu,
+    ButtonSize, ContextMenu, ContextMenuEntry, CountBadge, Icon, IconButton, IconName, IconSize,
+    PopoverMenu, Tab, Tooltip, prelude::*, right_click_menu,
 };
 use util::ResultExt as _;
 
@@ -46,6 +44,16 @@ fn activity_icon(panel_key: &str) -> Option<IconName> {
         "OutlinePanel" => Some(IconName::ActivityOutline),
         "agent_panel" => Some(IconName::ActivityChat),
         "TerminalPanel" => Some(IconName::ActivityTerminal),
+        _ => None,
+    }
+}
+
+/// The action whose key binding a panel's tooltip shows, when the panel is
+/// usually opened with a different action than the one its button dispatches.
+fn shortcut_action(panel_key: &str) -> Option<Box<dyn Action>> {
+    match panel_key {
+        "SearchPanel" => Some(DeploySearch::default().boxed_clone()),
+        "ExtensionsPanel" => Some(zed_actions::Extensions::default().boxed_clone()),
         _ => None,
     }
 }
@@ -356,11 +364,18 @@ impl ActivityBar {
                 .aria_label(icon_tooltip)
                 .on_click({
                     let action = action.boxed_clone();
+                    let focus_handle = focus_handle.clone();
                     move |_, window, cx| activate_panel_button(&focus_handle, &*action, window, cx)
                 })
                 .when(!is_menu_open, |this| {
+                    let shortcut = (!is_active)
+                        .then(|| shortcut_action(key))
+                        .flatten()
+                        .unwrap_or_else(|| action.boxed_clone());
+                    // Look the binding up from the dock rather than the focused
+                    // element, where e.g. the editor rebinds the project panel's key.
                     this.tooltip(move |_window, cx| {
-                        Tooltip::for_action(tooltip.clone(), &*action, cx)
+                        Tooltip::for_action_in(tooltip.clone(), &*shortcut, &focus_handle, cx)
                     })
                 });
             div()
@@ -445,6 +460,11 @@ impl ActivityBar {
                 Tooltip::text("Manage"),
             )
             .menu(|window, cx| {
+                let ai_enabled = !project::DisableAiSettings::get_global(cx).disable_ai;
+                let current_layout = AgentSettings::get_layout(cx);
+                let is_editor = matches!(current_layout, WindowLayout::Editor(_));
+                let is_agent = matches!(current_layout, WindowLayout::Agent(_));
+                let is_custom = matches!(current_layout, WindowLayout::Custom(_));
                 ContextMenu::build(window, cx, |menu, _, _| {
                     menu.action("Settings", zed_actions::OpenSettings.boxed_clone())
                         .action("Keymap", zed_actions::OpenKeymap.boxed_clone())
@@ -460,6 +480,42 @@ impl ActivityBar {
                             "Extensions",
                             zed_actions::Extensions::default().boxed_clone(),
                         )
+                        .when(ai_enabled, |menu| {
+                            menu.separator()
+                                .submenu("Panel Layout", move |menu, _window, _cx| {
+                                    menu.toggleable_entry(
+                                        "Classic",
+                                        is_editor,
+                                        IconPosition::Start,
+                                        Some(UseClassicLayout.boxed_clone()),
+                                        |window, cx| {
+                                            window.dispatch_action(
+                                                UseClassicLayout.boxed_clone(),
+                                                cx,
+                                            );
+                                        },
+                                    )
+                                    .toggleable_entry(
+                                        "Agentic",
+                                        is_agent,
+                                        IconPosition::Start,
+                                        Some(UseAgenticLayout.boxed_clone()),
+                                        |window, cx| {
+                                            window.dispatch_action(
+                                                UseAgenticLayout.boxed_clone(),
+                                                cx,
+                                            );
+                                        },
+                                    )
+                                    .when(is_custom, |menu| {
+                                        menu.item(
+                                            ContextMenuEntry::new("Custom")
+                                                .toggleable(IconPosition::Start, true)
+                                                .disabled(true),
+                                        )
+                                    })
+                                })
+                        })
                 })
                 .into()
             })
@@ -509,24 +565,6 @@ impl Render for ActivityBar {
             .children(buttons)
             .child(div().flex_1())
             .child(self.render_settings_menu(window, cx));
-
-        // In the modern UI the bar is a card like the docks and the editor.
-        if modern_ui_enabled(cx) {
-            return div()
-                .flex_none()
-                .h_full()
-                .p(MODERN_UI_GAP)
-                .child(
-                    div()
-                        .relative()
-                        .h_full()
-                        .overflow_hidden()
-                        .bg(colors.panel_background)
-                        .child(bar.w(bar_width(cx) - MODERN_UI_GAP * 2.))
-                        .child(modern_ui_card_corners(cx)),
-                )
-                .into_any_element();
-        }
 
         bar.bg(colors.status_bar_background)
             .border_color(colors.border)

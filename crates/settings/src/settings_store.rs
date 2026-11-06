@@ -2174,10 +2174,10 @@ mod tests {
             }
             "#
             .unindent(),
-            |settings| settings.title_bar.get_or_insert_default().show_branch_name = Some(true),
+            |settings| settings.title_bar.get_or_insert_default().show_menus = Some(true),
             r#"{
               "title_bar": {
-                "show_branch_name": true
+                "show_menus": true
               }
             }
             "#

@@ -13,6 +13,7 @@ pub struct RightClickMenu<M: ManagedView> {
     menu_builder: Option<Rc<dyn Fn(&mut Window, &mut App) -> Option<Entity<M>> + 'static>>,
     anchor: Option<Anchor>,
     attach: Option<Anchor>,
+    allow_shrink: bool,
 }
 
 impl<M: ManagedView> RightClickMenu<M> {
@@ -53,6 +54,13 @@ impl<M: ManagedView> RightClickMenu<M> {
         self
     }
 
+    /// Lets the trigger be narrower than its content when its container runs out
+    /// of room, for triggers that truncate their content.
+    pub fn allow_shrink(mut self, allow_shrink: bool) -> Self {
+        self.allow_shrink = allow_shrink;
+        self
+    }
+
     fn with_element_state<R>(
         &mut self,
         global_id: &GlobalElementId,
@@ -79,6 +87,7 @@ pub fn right_click_menu<M: ManagedView>(id: impl Into<ElementId>) -> RightClickM
         menu_builder: None,
         anchor: None,
         attach: None,
+        allow_shrink: false,
     }
 }
 
@@ -165,8 +174,12 @@ impl<M: ManagedView> Element for RightClickMenu<M> {
                     .as_mut()
                     .map(|child_element| child_element.request_layout(window, cx));
 
+                let mut style = gpui::Style::default();
+                if this.allow_shrink {
+                    style.min_size.width = px(0.).into();
+                }
                 let layout_id = window.request_layout(
-                    gpui::Style::default(),
+                    style,
                     menu_layout_id.into_iter().chain(child_layout_id),
                     cx,
                 );

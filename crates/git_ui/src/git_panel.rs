@@ -6961,6 +6961,29 @@ impl GitPanel {
         )
     }
 
+    /// The panel's fetch/push/pull button, for showing it outside the panel.
+    /// It takes its own menu handle so the two menus open independently.
+    pub(crate) fn render_detached_remote_button(
+        &self,
+        id: &'static str,
+        menu_handle: PopoverMenuHandle<ContextMenu>,
+        cx: &App,
+    ) -> Option<AnyElement> {
+        if !self.can_push_and_pull(cx) {
+            return None;
+        }
+        let branch = self.active_repository.as_ref()?.read(cx).branch.clone()?;
+        render_remote_button(
+            id,
+            &branch,
+            None,
+            true,
+            self.pending_remote_operation,
+            menu_handle,
+        )
+        .map(IntoElement::into_any_element)
+    }
+
     pub(crate) fn render_remote_button(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let branch = self.active_repository.as_ref()?.read(cx).branch.clone();
         if !self.can_push_and_pull(cx) {

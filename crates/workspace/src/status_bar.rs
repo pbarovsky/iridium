@@ -219,6 +219,9 @@ fn render_hideable_item(
 
     let menu_id: SharedString = format!("{side}-item-menu-{index}").into();
     right_click_menu(menu_id)
+        // The left items share the room the right items leave, so they have to
+        // be able to shrink and truncate their content.
+        .allow_shrink(side == "status-bar-left")
         .trigger(move |_is_active, _window, _cx| view)
         .menu(move |window, cx| {
             let hide = hide.clone();

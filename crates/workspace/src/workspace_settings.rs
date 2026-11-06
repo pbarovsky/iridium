@@ -45,7 +45,6 @@ pub struct WorkspaceSettings {
     pub use_system_window_tabs: bool,
     pub fullscreen_mode: settings::FullscreenMode,
     pub zoomed_padding: bool,
-    pub modern_ui: bool,
     pub window_decorations: settings::WindowDecorations,
     pub focus_follows_mouse: FocusFollowsMouse,
 }
@@ -152,7 +151,6 @@ impl Settings for WorkspaceSettings {
             use_system_window_tabs: workspace.use_system_window_tabs.unwrap(),
             fullscreen_mode: workspace.fullscreen_mode.unwrap(),
             zoomed_padding: workspace.zoomed_padding.unwrap(),
-            modern_ui: workspace.modern_ui.unwrap(),
             window_decorations: workspace.window_decorations.unwrap(),
             focus_follows_mouse: FocusFollowsMouse {
                 enabled: workspace
@@ -239,6 +237,10 @@ impl Settings for ActivityBarSettings {
 pub struct StatusBarSettings {
     pub show: bool,
     pub show_active_file: bool,
+    pub show_project_items: bool,
+    pub show_worktree_name: bool,
+    pub show_branch_name: bool,
+    pub show_branch_status_icon: bool,
     pub active_language_button: bool,
     pub cursor_position_button: bool,
     pub line_endings_button: bool,
@@ -252,6 +254,10 @@ impl Settings for StatusBarSettings {
         StatusBarSettings {
             show: status_bar.show.unwrap(),
             show_active_file: status_bar.show_active_file.unwrap(),
+            show_project_items: status_bar.show_project_items.unwrap(),
+            show_worktree_name: status_bar.show_worktree_name.unwrap(),
+            show_branch_name: status_bar.show_branch_name.unwrap(),
+            show_branch_status_icon: status_bar.show_branch_status_icon.unwrap(),
             active_language_button: status_bar.active_language_button.unwrap(),
             cursor_position_button: status_bar.cursor_position_button.unwrap(),
             line_endings_button: status_bar.line_endings_button.unwrap(),

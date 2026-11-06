@@ -3,6 +3,7 @@ use gpui::{
     Action, App, AsyncWindowContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
     IntoElement, ParentElement, Pixels, Render, Styled, WeakEntity, Window, actions, px,
 };
+use settings::{RegisterSetting, Settings};
 use ui::{IconName, prelude::*};
 use workspace::{
     Workspace,
@@ -20,6 +21,20 @@ actions!(
 );
 
 const EXTENSIONS_PANEL_KEY: &str = "ExtensionsPanel";
+
+#[derive(Debug, Clone, Copy, PartialEq, RegisterSetting)]
+pub struct ExtensionsPanelSettings {
+    pub button: bool,
+}
+
+impl Settings for ExtensionsPanelSettings {
+    fn from_settings(content: &settings::SettingsContent) -> Self {
+        let panel = content.extensions_panel.as_ref().unwrap();
+        Self {
+            button: panel.button.unwrap(),
+        }
+    }
+}
 
 pub(crate) fn init(cx: &mut App) {
     cx.observe_new(|workspace: &mut Workspace, _, _| {
@@ -97,8 +112,10 @@ impl Panel for ExtensionsPanel {
         px(320.)
     }
 
-    fn icon(&self, _: &Window, _: &App) -> Option<IconName> {
-        Some(IconName::ActivityExtensions)
+    fn icon(&self, _: &Window, cx: &App) -> Option<IconName> {
+        ExtensionsPanelSettings::get_global(cx)
+            .button
+            .then_some(IconName::ActivityExtensions)
     }
 
     fn icon_tooltip(&self, _: &Window, _: &App) -> Option<&'static str> {

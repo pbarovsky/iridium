@@ -143,11 +143,6 @@ pub struct WorkspaceSettingsContent {
     ///
     /// Default: true
     pub zoomed_padding: Option<bool>,
-    /// Whether to draw the docks and the editor area as separate rounded
-    /// cards with gaps between them, like VS Code's modern layout.
-    ///
-    /// Default: true
-    pub modern_ui: Option<bool>,
     /// Whether invoking a panel's `ToggleFocus` action while the panel is
     /// already focused closes the panel, instead of just moving focus back
     /// to the editor. This only applies to a panel's focus-toggle action, not
@@ -618,6 +613,24 @@ pub struct StatusBarSettingsContent {
     ///
     /// Default: false
     pub show_active_file: Option<bool>,
+    /// Whether to show the project host and name in the status bar.
+    ///
+    /// Default: true
+    pub show_project_items: Option<bool>,
+    /// Whether to show the worktree name button in the status bar.
+    ///
+    /// Default: true
+    pub show_worktree_name: Option<bool>,
+    /// Whether to show the branch name button in the status bar.
+    ///
+    /// Default: true
+    pub show_branch_name: Option<bool>,
+    /// Whether to show git status indicators on the branch icon in the status
+    /// bar. When enabled, the branch icon changes to reflect the current
+    /// repository status (e.g. modified, added, deleted, or conflict).
+    ///
+    /// Default: false
+    pub show_branch_status_icon: Option<bool>,
     /// Whether to display the active language button in the status bar.
     ///
     /// Default: true

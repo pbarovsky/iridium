@@ -387,6 +387,10 @@ impl Default for Open {
 actions!(
     workspace,
     [
+        /// Switches to the classic, editor-focused panel layout.
+        UseClassicLayout,
+        /// Switches to the agentic panel layout.
+        UseAgenticLayout,
         /// Activates the next pane in the workspace.
         ActivateNextPane,
         /// Activates the previous pane in the workspace.
@@ -8921,9 +8925,6 @@ impl Workspace {
             .flex()
             .overflow_hidden()
             .flex_none()
-            .when(dock_is_open && dock::modern_ui_enabled(cx), |this| {
-                this.p(dock::MODERN_UI_GAP)
-            })
             .child(dock.clone())
             .children(leader_border);
 
@@ -9131,28 +9132,13 @@ impl Workspace {
                 this.track_focus(&self.region_focus_handles.editor)
             })
             .size_full()
-            .map(|this| {
-                let card_corners = dock::modern_ui_enabled(cx)
-                    .then(|| dock::modern_ui_card_corners(cx).into_any_element());
-                let center = self.center.render(
-                    self.zoomed.as_ref(),
-                    self.maximized_pane.as_ref(),
-                    render_cx,
-                    window,
-                    cx,
-                );
-                let Some(card_corners) = card_corners else {
-                    return this.child(center);
-                };
-                this.p(dock::MODERN_UI_GAP).child(
-                    div()
-                        .relative()
-                        .size_full()
-                        .overflow_hidden()
-                        .child(center)
-                        .child(card_corners),
-                )
-            })
+            .child(self.center.render(
+                self.zoomed.as_ref(),
+                self.maximized_pane.as_ref(),
+                render_cx,
+                window,
+                cx,
+            ))
     }
 
     pub fn for_window(window: &Window, cx: &App) -> Option<Entity<Workspace>> {
@@ -9942,16 +9928,10 @@ impl Render for Workspace {
                     .child(
                         div()
                             .id("workspace")
-                            .map(|this| {
-                                if dock::modern_ui_enabled(cx) {
-                                    this.bg(dock::modern_ui_frame_color(cx))
-                                } else {
-                                    this.bg(colors.background)
-                                        .border_t_1()
-                                        .border_b_1()
-                                        .border_color(colors.border)
-                                }
-                            })
+                            .bg(colors.background)
+                            .border_t_1()
+                            .border_b_1()
+                            .border_color(colors.border)
                             .relative()
                             .flex_1()
                             .w_full()

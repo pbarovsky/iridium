@@ -258,6 +258,7 @@ pub fn migrate_settings(text: &str) -> Result<Option<String>> {
         MigrationType::Json(migrations::m_2026_08_30::nest_markdown_preview_settings),
         MigrationType::Json(migrations::m_2026_09_16::nest_agent_threads_sidebar_settings),
         MigrationType::Json(migrations::m_2026_09_29::move_copilot_enterprise_uri),
+        MigrationType::Json(migrations::m_2026_11_06::move_project_items_to_status_bar),
     ];
     run_migrations(text, migrations)
 }
@@ -4709,9 +4710,20 @@ mod tests {
         );
     }
 
+    /// The `show_branch_icon` migration, after the one that gives profiles their
+    /// `settings` key. Later migrations are left out: one moves these title bar
+    /// keys to the status bar, which would change what these tests check.
+    const SHOW_BRANCH_ICON_MIGRATION: &[MigrationType] = &[
+        MigrationType::Json(migrations::m_2026_04_01::restructure_profiles_with_settings_key),
+        MigrationType::Json(
+            migrations::m_2026_04_17::promote_show_branch_icon_true_to_show_branch_status_icon,
+        ),
+    ];
+
     #[test]
     fn test_promote_show_branch_icon_true_to_show_branch_status_icon_at_root() {
-        assert_migrate_settings(
+        assert_migrate_with_migrations(
+            SHOW_BRANCH_ICON_MIGRATION,
             indoc! {r#"
                 {
                     "title_bar": {
@@ -4733,7 +4745,8 @@ mod tests {
 
     #[test]
     fn test_drop_show_branch_icon_false_without_setting_status_icon() {
-        assert_migrate_settings(
+        assert_migrate_with_migrations(
+            SHOW_BRANCH_ICON_MIGRATION,
             indoc! {r#"
                 {
                     "title_bar": {
@@ -4754,7 +4767,8 @@ mod tests {
 
     #[test]
     fn test_promote_show_branch_icon_true_to_show_branch_status_icon_in_platform_override() {
-        assert_migrate_settings(
+        assert_migrate_with_migrations(
+            SHOW_BRANCH_ICON_MIGRATION,
             indoc! {r#"
                 {
                     "macos": {
@@ -4780,7 +4794,8 @@ mod tests {
 
     #[test]
     fn test_promote_show_branch_icon_true_to_show_branch_status_icon_in_release_override() {
-        assert_migrate_settings(
+        assert_migrate_with_migrations(
+            SHOW_BRANCH_ICON_MIGRATION,
             indoc! {r#"
                 {
                     "preview": {
@@ -4806,7 +4821,8 @@ mod tests {
 
     #[test]
     fn test_promote_show_branch_icon_true_to_show_branch_status_icon_in_profiles() {
-        assert_migrate_settings(
+        assert_migrate_with_migrations(
+            SHOW_BRANCH_ICON_MIGRATION,
             indoc! {r#"
                 {
                     "profiles": {
@@ -4838,7 +4854,8 @@ mod tests {
 
     #[test]
     fn test_promote_show_branch_icon_true_to_show_branch_status_icon_across_all_scopes() {
-        assert_migrate_settings(
+        assert_migrate_with_migrations(
+            SHOW_BRANCH_ICON_MIGRATION,
             indoc! {r#"
                 {
                     "title_bar": {
@@ -4939,7 +4956,8 @@ mod tests {
     #[test]
     fn test_promote_show_branch_icon_true_to_show_branch_status_icon_no_change_when_already_migrated()
      {
-        assert_migrate_settings(
+        assert_migrate_with_migrations(
+            SHOW_BRANCH_ICON_MIGRATION,
             indoc! {r#"
                 {
                     "title_bar": {
@@ -4952,10 +4970,15 @@ mod tests {
         );
 
         // No title_bar key — should be unchanged
-        assert_migrate_settings(r#"{ "theme": "One Dark" }"#, None);
+        assert_migrate_with_migrations(
+            SHOW_BRANCH_ICON_MIGRATION,
+            r#"{ "theme": "One Dark" }"#,
+            None,
+        );
 
         // title_bar without show_branch_icon — should be unchanged
-        assert_migrate_settings(
+        assert_migrate_with_migrations(
+            SHOW_BRANCH_ICON_MIGRATION,
             indoc! {r#"
                 {
                     "title_bar": {
@@ -5441,5 +5464,86 @@ mod tests {
                 }
             "#}),
         );
+    }
+
+    fn migrated_settings_value(input: &str) -> serde_json::Value {
+        let migrated = migrate_settings(input)
+            .expect("migration should succeed")
+            .expect("settings should change");
+        assert_eq!(
+            migrate_settings(&migrated).expect("rerunning the migration should succeed"),
+            None,
+            "rerunning the migrations should change nothing"
+        );
+        let value: serde_json_lenient::Value =
+            parse_json_with_comments(&migrated).expect("migrated settings should parse");
+        serde_json::to_value(value).expect("settings should convert to JSON")
+    }
+
+    #[test]
+    fn test_move_project_items_to_status_bar() {
+        let value = migrated_settings_value(
+            r#"{
+                "title_bar": {
+                    "show_project_items": false,
+                    "show_worktree_name": true,
+                    "show_branch_name": false,
+                    "show_branch_status_icon": true,
+                    "show_user_picture": true,
+                    "show_user_menu": true,
+                    "show_sign_in": false,
+                    "show_menus": true
+                }
+            }"#,
+        );
+        assert_eq!(
+            value["status_bar"],
+            serde_json::json!({
+                "show_project_items": false,
+                "show_worktree_name": true,
+                "show_branch_name": false,
+                "show_branch_status_icon": true,
+            })
+        );
+        assert_eq!(
+            value["title_bar"],
+            serde_json::json!({ "show_menus": true })
+        );
+    }
+
+    #[test]
+    fn test_move_project_items_to_status_bar_keeps_existing_status_bar_values() {
+        let value = migrated_settings_value(
+            r#"{
+                "status_bar": { "show_branch_name": true, "show_active_file": true },
+                "title_bar": { "show_branch_name": false, "show_project_items": false }
+            }"#,
+        );
+        assert_eq!(
+            value["status_bar"],
+            serde_json::json!({
+                "show_branch_name": true,
+                "show_active_file": true,
+                "show_project_items": false,
+            })
+        );
+        assert!(value.get("title_bar").is_none());
+    }
+
+    #[test]
+    fn test_move_project_items_to_status_bar_in_profiles() {
+        let value = migrated_settings_value(
+            r#"{
+                "profiles": {
+                    "Work": { "settings": { "title_bar": { "show_branch_name": false } } }
+                }
+            }"#,
+        );
+        let profile = &value["profiles"]["Work"]["settings"];
+        assert_eq!(
+            profile["status_bar"],
+            serde_json::json!({ "show_branch_name": false })
+        );
+        assert!(profile.get("title_bar").is_none());
     }
 }

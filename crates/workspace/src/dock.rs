@@ -24,54 +24,6 @@ use util::ResultExt as _;
 
 pub(crate) const RESIZE_HANDLE_SIZE: Pixels = px(6.);
 
-/// Half the gap between cards in the modern UI. Every card is padded by this,
-/// so neighbouring cards end up a full gap apart.
-pub(crate) const MODERN_UI_GAP: Pixels = px(3.);
-const MODERN_UI_RADIUS: Pixels = px(6.);
-
-pub(crate) fn modern_ui_enabled(cx: &App) -> bool {
-    WorkspaceSettings::get_global(cx).modern_ui
-}
-
-/// The color behind the cards in the modern UI. It matches the title bar so the
-/// title bar, the gaps and the activity bar read as one frame around the cards.
-pub(crate) fn modern_ui_frame_color(cx: &App) -> gpui::Hsla {
-    cx.theme().colors().title_bar_background
-}
-
-/// Rounds the corners of a modern UI card and draws its outline. It goes last
-/// in the card, so it paints over the content.
-///
-/// GPUI clips content to rectangles only, so a card can't clip its children to
-/// its rounded corners. Instead, a thick frame-colored border is laid over the
-/// card's edge, sticking out past it: its rounded inner edge hides the square
-/// corners of whatever the card contains. The card must clip its overflow so
-/// the part sticking out isn't drawn over the neighbouring cards.
-///
-/// The inner corner radius is the outer one minus the border width, around the
-/// same center, so the border has to be thicker than `radius * (sqrt(2) - 1)`
-/// for its outer curve to reach past the card's corner.
-pub(crate) fn modern_ui_card_corners(cx: &App) -> impl IntoElement {
-    const COVER: Pixels = px(6.);
-    let colors = cx.theme().colors();
-    div()
-        .absolute()
-        .top(-COVER)
-        .left(-COVER)
-        .right(-COVER)
-        .bottom(-COVER)
-        .border(COVER)
-        .border_color(modern_ui_frame_color(cx))
-        .rounded(MODERN_UI_RADIUS + COVER)
-        .child(
-            div()
-                .size_full()
-                .border_1()
-                .border_color(colors.border)
-                .rounded(MODERN_UI_RADIUS),
-        )
-}
-
 pub enum PanelEvent {
     ZoomIn,
     ZoomOut,
@@ -1416,7 +1368,6 @@ impl Render for Dock {
                 }
             };
 
-            let modern_ui = modern_ui_enabled(cx);
             let top_activity_bar = (position == DockPosition::Left && {
                 let settings = ActivityBarSettings::get_global(cx);
                 settings.show && settings.position == ActivityBarPosition::Top
@@ -1443,15 +1394,10 @@ impl Render for Dock {
                     Axis::Horizontal => this.w_full().h_full().flex_row(),
                     Axis::Vertical => this.h_full().w_full().flex_col(),
                 })
-                .map(|this| {
-                    if modern_ui {
-                        return this.relative();
-                    }
-                    match self.position() {
-                        DockPosition::Left => this.border_r_1(),
-                        DockPosition::Right => this.border_l_1(),
-                        DockPosition::Bottom => this.border_t_1(),
-                    }
+                .map(|this| match self.position() {
+                    DockPosition::Left => this.border_r_1(),
+                    DockPosition::Right => this.border_l_1(),
+                    DockPosition::Bottom => this.border_t_1(),
                 })
                 .child(
                     v_flex()
@@ -1469,7 +1415,6 @@ impl Render for Dock {
                             ),
                         ),
                 )
-                .when(modern_ui, |this| this.child(modern_ui_card_corners(cx)))
                 .when(self.resizable(cx), |this| {
                     this.child(create_resize_handle())
                 })
@@ -1515,13 +1460,6 @@ impl Render for PanelButtons {
             .iter()
             .enumerate()
             .filter_map(|(i, entry)| {
-                // The bottom dock is toggled from the title bar's "Toggle Panel"
-                // button, which stands in for the terminal's button, as in VS Code.
-                if dock_position == DockPosition::Bottom
-                    && entry.panel.persistent_name() == "TerminalPanel"
-                {
-                    return None;
-                }
                 let icon = entry.panel.icon(window, cx)?;
                 let icon_tooltip = entry
                     .panel

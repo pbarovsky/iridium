@@ -22,10 +22,7 @@ impl Render for SearchButton {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl ui::IntoElement {
         let button = div();
 
-        // The activity bar has its own search panel button.
-        if !EditorSettings::get_global(cx).search.button
-            || workspace::ActivityBarSettings::get_global(cx).show
-        {
+        if !EditorSettings::get_global(cx).search.button {
             return button.hidden();
         }
 

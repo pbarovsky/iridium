@@ -279,6 +279,9 @@ pub struct SettingsContent {
     /// Configuration for the search panel.
     pub search_panel: Option<SearchPanelSettingsContent>,
 
+    /// Configuration for the extensions panel.
+    pub extensions_panel: Option<ExtensionsPanelSettingsContent>,
+
     pub project_panel: Option<ProjectPanelSettingsContent>,
 
     /// Configuration for Node-related features
@@ -413,7 +416,7 @@ fallible_options::flattened_deserialize!(SettingsContent {
         agent_servers, audio, auto_update, base_keymap, collaboration_panel, debugger, diagnostics,
         git,
         global_lsp_settings, image_viewer, markdown_preview, repl, helix_mode, hide_mouse,
-        journal, log, line_indicator_format, language_models, copilot, outline_panel, search_panel, project_panel,
+        journal, log, line_indicator_format, language_models, copilot, outline_panel, search_panel, extensions_panel, project_panel,
         node, proxy, reduce_motion, server_url, credentials_url, session, telemetry, terminal,
         title_bar, vim_mode, calls, which_key, vim, modeline_lines, feature_flags,
         instrumentation,
@@ -1224,6 +1227,15 @@ pub struct SearchPanelSettingsContent {
     ///
     /// Default: left
     pub dock: Option<DockSide>,
+}
+
+#[with_fallible_options]
+#[derive(Clone, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug, PartialEq)]
+pub struct ExtensionsPanelSettingsContent {
+    /// Whether to show the extensions panel button in the activity bar.
+    ///
+    /// Default: true
+    pub button: Option<bool>,
 }
 
 #[with_fallible_options]

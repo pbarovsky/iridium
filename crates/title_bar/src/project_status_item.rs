@@ -15,13 +15,12 @@ use settings::{Settings as _, SettingsStore};
 use theme::ActiveTheme;
 use ui::{ButtonLike, IconWithIndicator, Indicator, PopoverMenu, TintColor, Tooltip, prelude::*};
 use util::ResultExt;
-use workspace::{HideStatusItem, ItemHandle, MultiWorkspace, StatusItemView, Workspace};
+use workspace::{
+    HideStatusItem, ItemHandle, MultiWorkspace, StatusBarSettings, StatusItemView, Workspace,
+};
 use zed_actions::OpenRemote;
 
-use crate::title_bar_settings::TitleBarSettings;
-
 const MAX_PROJECT_NAME_LENGTH: usize = 40;
-const MAX_BRANCH_NAME_LENGTH: usize = 40;
 const MAX_SHORT_SHA_LENGTH: usize = 8;
 
 /// Shows the project name, worktree and branch at the left edge of the status bar,
@@ -374,8 +373,7 @@ impl ProjectStatusItem {
             let branch_name = repo
                 .branch
                 .as_ref()
-                .map(|branch| branch.name())
-                .map(|name| util::truncate_and_trailoff(name, MAX_BRANCH_NAME_LENGTH))
+                .map(|branch| branch.name().to_string())
                 .or_else(|| {
                     repo.head_commit.as_ref().map(|commit| {
                         commit
@@ -403,7 +401,7 @@ impl ProjectStatusItem {
             (branch_name, icon_info, is_detached_head)
         };
 
-        let settings = TitleBarSettings::get_global(cx);
+        let settings = StatusBarSettings::get_global(cx);
         let effective_repository = Some(repository);
 
         let worktree_label: SharedString = linked_worktree_name.unwrap_or_else(|| "main".into());
@@ -484,6 +482,7 @@ impl ProjectStatusItem {
                         .selected_style(ButtonStyle::Tinted(TintColor::Accent))
                         .label_size(LabelSize::Small)
                         .color(Color::Muted)
+                        .truncate(true)
                         .tab_index(0isize)
                         .start_icon(
                             Icon::new(branch_icon)
@@ -493,6 +492,7 @@ impl ProjectStatusItem {
                 };
 
                 PopoverMenu::new("branch-menu")
+                    .allow_shrink(true)
                     .menu(move |window, cx| {
                         git_ui_core::build_branch_picker(
                             workspace.downgrade(),
@@ -527,6 +527,7 @@ impl ProjectStatusItem {
 
         Some(
             h_flex()
+                .min_w_0()
                 .gap_px()
                 .children(worktree_button)
                 .when(show_separator, |this| {
@@ -614,11 +615,12 @@ impl ProjectStatusItem {
 
 impl Render for ProjectStatusItem {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let settings = *TitleBarSettings::get_global(cx);
+        let settings = StatusBarSettings::get_global(cx);
         let is_git_enabled = ProjectSettings::get_global(cx).git.enabled.status;
         let (project_name, repository, linked_worktree_name) = self.project_name_and_repository(cx);
 
         h_flex()
+            .min_w_0()
             .gap_0p5()
             .when(settings.show_project_items, |this| {
                 this.children(self.render_project_host(cx))
@@ -641,10 +643,10 @@ impl StatusItemView for ProjectStatusItem {
 
     fn hide_setting(&self, _cx: &App) -> Option<HideStatusItem> {
         Some(HideStatusItem::new(|settings| {
-            let title_bar = settings.title_bar.get_or_insert_default();
-            title_bar.show_project_items = Some(false);
-            title_bar.show_worktree_name = Some(false);
-            title_bar.show_branch_name = Some(false);
+            let status_bar = settings.status_bar.get_or_insert_default();
+            status_bar.show_project_items = Some(false);
+            status_bar.show_worktree_name = Some(false);
+            status_bar.show_branch_name = Some(false);
         }))
     }
 }

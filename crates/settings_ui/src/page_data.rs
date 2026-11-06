@@ -4094,23 +4094,96 @@ fn search_and_files_page() -> SettingsPage {
 }
 
 fn window_and_layout_page() -> SettingsPage {
-    fn status_bar_section() -> [SettingsPageItem; 12] {
+    fn status_bar_section() -> [SettingsPageItem; 14] {
         [
             SettingsPageItem::SectionHeader("Status Bar"),
             SettingsPageItem::SettingItem(SettingItem {
-                title: "Project Panel Button",
-                description: "Show the project panel button in the status bar.",
+                title: "Show Project Items",
+                description: "Show the project host and name in the status bar.",
                 field: Box::new(SettingField {
                     organization_override: None,
-                    json_path: Some("project_panel.button"),
+                    json_path: Some("status_bar.show_project_items"),
                     pick: |settings_content| {
-                        settings_content.project_panel.as_ref()?.button.as_ref()
+                        settings_content
+                            .status_bar
+                            .as_ref()?
+                            .show_project_items
+                            .as_ref()
                     },
                     write: |settings_content, value, _| {
                         settings_content
-                            .project_panel
+                            .status_bar
                             .get_or_insert_default()
-                            .button = value;
+                            .show_project_items = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Show Worktree Name",
+                description: "Show the worktree name button in the status bar.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("status_bar.show_worktree_name"),
+                    pick: |settings_content| {
+                        settings_content
+                            .status_bar
+                            .as_ref()?
+                            .show_worktree_name
+                            .as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .status_bar
+                            .get_or_insert_default()
+                            .show_worktree_name = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Show Branch Name",
+                description: "Show the branch name button in the status bar.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("status_bar.show_branch_name"),
+                    pick: |settings_content| {
+                        settings_content
+                            .status_bar
+                            .as_ref()?
+                            .show_branch_name
+                            .as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .status_bar
+                            .get_or_insert_default()
+                            .show_branch_name = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Show Branch Status Icon",
+                description: "Show git status indicators on the branch icon in the status bar.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("status_bar.show_branch_status_icon"),
+                    pick: |settings_content| {
+                        settings_content
+                            .status_bar
+                            .as_ref()?
+                            .show_branch_status_icon
+                            .as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .status_bar
+                            .get_or_insert_default()
+                            .show_branch_status_icon = value;
                     },
                 }),
                 metadata: None,
@@ -4246,6 +4319,20 @@ fn window_and_layout_page() -> SettingsPage {
                 files: USER,
             }),
             SettingsPageItem::SettingItem(SettingItem {
+                title: "Debugger Button",
+                description: "Show the debugger panel button in the status bar.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("debugger.button"),
+                    pick: |settings_content| settings_content.debugger.as_ref()?.button.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.debugger.get_or_insert_default().button = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
                 title: "Diagnostics Button",
                 description: "Show the project diagnostics button in the status bar.",
                 field: Box::new(SettingField {
@@ -4254,40 +4341,6 @@ fn window_and_layout_page() -> SettingsPage {
                     pick: |settings_content| settings_content.diagnostics.as_ref()?.button.as_ref(),
                     write: |settings_content, value, _| {
                         settings_content.diagnostics.get_or_insert_default().button = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Project Search Button",
-                description: "Show the project search button in the status bar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("search.button"),
-                    pick: |settings_content| {
-                        settings_content.editor.search.as_ref()?.button.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .editor
-                            .search
-                            .get_or_insert_default()
-                            .button = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Debugger Button",
-                description: "Show the debugger button in the status bar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("debugger.button"),
-                    pick: |settings_content| settings_content.debugger.as_ref()?.button.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.debugger.get_or_insert_default().button = value;
                     },
                 }),
                 metadata: None,
@@ -4319,101 +4372,168 @@ fn window_and_layout_page() -> SettingsPage {
         ]
     }
 
-    fn title_bar_section() -> [SettingsPageItem; 11] {
+    fn activity_bar_section() -> [SettingsPageItem; 10] {
+        [
+            SettingsPageItem::SectionHeader("Activity Bar"),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Show Activity Bar",
+                description: "Show the activity bar with buttons for the side panels.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("activity_bar.show"),
+                    pick: |settings_content| settings_content.activity_bar.as_ref()?.show.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.activity_bar.get_or_insert_default().show = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Activity Bar Position",
+                description: "Where the activity bar is shown: on the left or right edge of the window, or across the top of the left dock.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("activity_bar.position"),
+                    pick: |settings_content| {
+                        settings_content.activity_bar.as_ref()?.position.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .activity_bar
+                            .get_or_insert_default()
+                            .position = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Activity Bar Icon Size",
+                description: "Size of the icons on a vertical activity bar, in pixels (12 to 48).",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("activity_bar.icon_size"),
+                    pick: |settings_content| {
+                        settings_content.activity_bar.as_ref()?.icon_size.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .activity_bar
+                            .get_or_insert_default()
+                            .icon_size = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Project Panel Button",
+                description: "Show the project panel button.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("project_panel.button"),
+                    pick: |settings_content| {
+                        settings_content.project_panel.as_ref()?.button.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .project_panel
+                            .get_or_insert_default()
+                            .button = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Search Panel Button",
+                description: "Show the search panel button.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("search_panel.button"),
+                    pick: |settings_content| {
+                        settings_content.search_panel.as_ref()?.button.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content.search_panel.get_or_insert_default().button = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Git Panel Button",
+                description: "Show the git panel button.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("git_panel.button"),
+                    pick: |settings_content| settings_content.git_panel.as_ref()?.button.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.git_panel.get_or_insert_default().button = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Extensions Panel Button",
+                description: "Show the extensions panel button.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("extensions_panel.button"),
+                    pick: |settings_content| {
+                        settings_content.extensions_panel.as_ref()?.button.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .extensions_panel
+                            .get_or_insert_default()
+                            .button = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Outline Panel Button",
+                description: "Show the outline panel button.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("outline_panel.button"),
+                    pick: |settings_content| {
+                        settings_content.outline_panel.as_ref()?.button.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .outline_panel
+                            .get_or_insert_default()
+                            .button = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Agent Panel Button",
+                description: "Show the agent panel button.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("agent.button"),
+                    pick: |settings_content| settings_content.agent.as_ref()?.button.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.agent.get_or_insert_default().button = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+        ]
+    }
+
+    fn title_bar_section() -> [SettingsPageItem; 5] {
         [
             SettingsPageItem::SectionHeader("Title Bar"),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Show Branch Status Icon",
-                description: "Show git status indicators on the branch icon in the titlebar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("title_bar.show_branch_status_icon"),
-                    pick: |settings_content| {
-                        settings_content
-                            .title_bar
-                            .as_ref()?
-                            .show_branch_status_icon
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .title_bar
-                            .get_or_insert_default()
-                            .show_branch_status_icon = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Show Branch Name",
-                description: "Show the branch name button in the titlebar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("title_bar.show_branch_name"),
-                    pick: |settings_content| {
-                        settings_content
-                            .title_bar
-                            .as_ref()?
-                            .show_branch_name
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .title_bar
-                            .get_or_insert_default()
-                            .show_branch_name = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Show Worktree Name",
-                description: "Show the worktree name button in the titlebar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("title_bar.show_worktree_name"),
-                    pick: |settings_content| {
-                        settings_content
-                            .title_bar
-                            .as_ref()?
-                            .show_worktree_name
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .title_bar
-                            .get_or_insert_default()
-                            .show_worktree_name = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Show Project Items",
-                description: "Show the project host and name in the titlebar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("title_bar.show_project_items"),
-                    pick: |settings_content| {
-                        settings_content
-                            .title_bar
-                            .as_ref()?
-                            .show_project_items
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .title_bar
-                            .get_or_insert_default()
-                            .show_project_items = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Show Onboarding Banner",
                 description: "Show banners announcing new features in the titlebar.",
@@ -4432,48 +4552,6 @@ fn window_and_layout_page() -> SettingsPage {
                             .title_bar
                             .get_or_insert_default()
                             .show_onboarding_banner = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Show User Menu",
-                description: "Show the user menu button in the titlebar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("title_bar.show_user_menu"),
-                    pick: |settings_content| {
-                        settings_content.title_bar.as_ref()?.show_user_menu.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .title_bar
-                            .get_or_insert_default()
-                            .show_user_menu = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Show User Picture",
-                description: "Show user picture in the titlebar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("title_bar.show_user_picture"),
-                    pick: |settings_content| {
-                        settings_content
-                            .title_bar
-                            .as_ref()?
-                            .show_user_picture
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .title_bar
-                            .get_or_insert_default()
-                            .show_user_picture = value;
                     },
                 }),
                 metadata: None,
@@ -5224,7 +5302,7 @@ fn window_and_layout_page() -> SettingsPage {
         ]
     }
 
-    fn pane_modifiers_section() -> [SettingsPageItem; 6] {
+    fn pane_modifiers_section() -> [SettingsPageItem; 5] {
         [
             SettingsPageItem::SectionHeader("Pane Modifiers"),
             SettingsPageItem::SettingItem(SettingItem {
@@ -5286,20 +5364,6 @@ fn window_and_layout_page() -> SettingsPage {
                     pick: |settings_content| settings_content.workspace.zoomed_padding.as_ref(),
                     write: |settings_content, value, _| {
                         settings_content.workspace.zoomed_padding = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Modern UI",
-                description: "Draw the docks and the editor area as separate rounded cards, like VS Code's modern layout.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("modern_ui"),
-                    pick: |settings_content| settings_content.workspace.modern_ui.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.workspace.modern_ui = value;
                     },
                 }),
                 metadata: None,
@@ -5371,6 +5435,7 @@ fn window_and_layout_page() -> SettingsPage {
     SettingsPage {
         title: "Window & Layout",
         items: concat_sections![
+            activity_bar_section(),
             status_bar_section(),
             title_bar_section(),
             tab_bar_section(),
@@ -6203,28 +6268,9 @@ fn panels_page() -> SettingsPage {
         ]
     }
 
-    fn outline_panel_section() -> [SettingsPageItem; 12] {
+    fn outline_panel_section() -> [SettingsPageItem; 11] {
         [
             SettingsPageItem::SectionHeader("Outline Panel"),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Outline Panel Button",
-                description: "Show the outline panel button in the status bar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("outline_panel.button"),
-                    pick: |settings_content| {
-                        settings_content.outline_panel.as_ref()?.button.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .outline_panel
-                            .get_or_insert_default()
-                            .button = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Outline Panel Dock",
                 description: "Where to dock the outline panel.",
@@ -6445,23 +6491,9 @@ fn panels_page() -> SettingsPage {
         ]
     }
 
-    fn git_panel_section() -> [SettingsPageItem; 19] {
+    fn git_panel_section() -> [SettingsPageItem; 18] {
         [
             SettingsPageItem::SectionHeader("Git Panel"),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Git Panel Button",
-                description: "Show the Git panel button in the status bar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("git_panel.button"),
-                    pick: |settings_content| settings_content.git_panel.as_ref()?.button.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.git_panel.get_or_insert_default().button = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Git Panel Dock",
                 description: "Where to dock the Git panel.",
@@ -6824,23 +6856,9 @@ fn panels_page() -> SettingsPage {
         ]
     }
 
-    fn agent_panel_section() -> [SettingsPageItem; 7] {
+    fn agent_panel_section() -> [SettingsPageItem; 6] {
         [
             SettingsPageItem::SectionHeader("Agent Panel"),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Agent Panel Button",
-                description: "Whether to show the agent panel button in the status bar.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.button"),
-                    pick: |settings_content| settings_content.agent.as_ref()?.button.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.agent.get_or_insert_default().button = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Agent Panel Dock",
                 description: "Where to dock the agent panel.",

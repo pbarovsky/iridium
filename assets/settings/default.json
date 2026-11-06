@@ -251,9 +251,6 @@
   //
   // Default: true
   "zoomed_padding": true,
-  // Whether to draw the docks and the editor area as separate rounded cards
-  // with gaps between them, like VS Code's modern layout.
-  "modern_ui": true,
   // Window title template.
   // Available variables are ${projectName}, ${fileName}, ${filePath},
   // ${relativePath}, ${fileStem}, ${remoteName}, ${remoteHost},
@@ -621,20 +618,8 @@
   "fullscreen_mode": "native",
   // Titlebar related settings
   "title_bar": {
-    // Whether to show git status indicators on the branch icon in the titlebar.
-    "show_branch_status_icon": false,
-    // Whether to show the branch name button in the titlebar.
-    "show_branch_name": true,
-    // Whether to show the worktree name button in the titlebar.
-    "show_worktree_name": true,
-    // Whether to show the project host and name in the titlebar.
-    "show_project_items": true,
     // Whether to show onboarding banners in the titlebar.
     "show_onboarding_banner": true,
-    // Whether to show user picture in the titlebar.
-    "show_user_picture": true,
-    // Whether to show the user menu in the titlebar.
-    "show_user_menu": true,
     // Whether to show the menus in the titlebar.
     "show_menus": false,
     // Whether to open the menus in the titlebar on hover.
@@ -1017,6 +1002,10 @@
     "default_width": 300,
     // Where to dock the search panel. Can be 'left' or 'right'.
     "dock": "left",
+  },
+  "extensions_panel": {
+    // Whether to show the extensions panel button in the activity bar
+    "button": true,
   },
   "outline_panel": {
     // Whether to show the outline panel button in the status bar
@@ -2046,7 +2035,7 @@
     "position": "left",
     // Size of the icons on a vertical activity bar, in pixels (12 to 48). The
     // bar grows or shrinks to fit them. The top bar always matches the tab bar.
-    // "icon_size": 20,
+    "icon_size": 20,
   },
   // Status bar-related settings.
   "status_bar": {
@@ -2054,6 +2043,14 @@
     "experimental.show": true,
     // Whether to show the name of the active file in the status bar.
     "show_active_file": false,
+    // Whether to show the project host and name in the status bar.
+    "show_project_items": true,
+    // Whether to show the worktree name button in the status bar.
+    "show_worktree_name": true,
+    // Whether to show the branch name button in the status bar.
+    "show_branch_name": true,
+    // Whether to show git status indicators on the branch icon in the status bar.
+    "show_branch_status_icon": false,
     // Whether to show the active language button in the status bar.
     "active_language_button": true,
     // Whether to show the cursor position button in the status bar.
