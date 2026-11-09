@@ -1237,6 +1237,27 @@ pub fn open_or_reuse_graph(
     }
 }
 
+impl GitGraph {
+    /// A compact graph for the git panel: the graph lanes and commit subjects
+    /// only. Clicking a commit opens it in a tab.
+    pub(crate) fn new_embedded(
+        repo_id: RepositoryId,
+        git_store: Entity<GitStore>,
+        workspace: WeakEntity<Workspace>,
+        log_source: LogSource,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let mut this = Self::new(repo_id, git_store, workspace, Some(log_source), window, cx);
+        this.embedded = true;
+        let description_column = this.table_column_offset();
+        for (index, hidden) in this.column_visibility.as_mut_slice().iter_mut().enumerate() {
+            *hidden = index != GRAPH_COLUMN_INDEX && index != description_column;
+        }
+        this
+    }
+}
+
 fn lane_center_x(bounds: Bounds<Pixels>, lane: f32) -> Pixels {
     bounds.origin.x + LEFT_PADDING + lane * LANE_WIDTH + LANE_WIDTH / 2.0
 }
@@ -1467,6 +1488,9 @@ pub struct GitGraph {
     changed_files_expanded_dirs: HashMap<RepoPath, bool>,
     pending_select_sha: Option<Oid>,
     nav_history: Option<ItemNavHistory>,
+    /// Shown inside the git panel rather than as a tab: only the graph and the
+    /// commit subjects, without the column headers, search bar or detail panel.
+    embedded: bool,
 }
 
 impl GitGraph {
@@ -1730,6 +1754,7 @@ impl GitGraph {
             changed_files_expanded_dirs: HashMap::default(),
             pending_select_sha: None,
             nav_history: None,
+            embedded: false,
         };
 
         this.fetch_initial_graph_data(cx);
@@ -4084,7 +4109,7 @@ impl GitGraph {
 
         self.select_entry(entry_idx, scroll_strategy, cx);
 
-        if event.click_count() >= 2 {
+        if event.click_count() >= 2 || self.embedded {
             self.open_commit_view(entry_idx, window, cx);
         }
     }
@@ -4424,6 +4449,7 @@ impl Render for GitGraph {
                         .flex_col()
                         .child(
                             div()
+                                .when(self.embedded, |this| this.hidden())
                                 .on_mouse_down(
                                     MouseButton::Right,
                                     cx.listener(|this, event: &MouseDownEvent, window, cx| {
@@ -4674,7 +4700,7 @@ impl Render for GitGraph {
                         state.commit_ratio();
                     });
                 }))
-                .when(self.selected_entry_idx.is_some(), |this| {
+                .when(self.selected_entry_idx.is_some() && !self.embedded, |this| {
                     this.child(self.render_commit_view_resize_handle(window, cx))
                         .child(self.render_commit_detail_panel(window, cx))
                 })
@@ -4684,7 +4710,11 @@ impl Render for GitGraph {
             .key_context("GitGraph")
             .track_focus(&self.focus_handle)
             .size_full()
-            .bg(cx.theme().colors().editor_background)
+            .bg(if self.embedded {
+                cx.theme().colors().panel_background
+            } else {
+                cx.theme().colors().editor_background
+            })
             .on_action(cx.listener(|this, _: &OpenCommitView, window, cx| {
                 this.open_selected_commit_view(window, cx);
             }))
@@ -4722,7 +4752,9 @@ impl Render for GitGraph {
             .child(
                 v_flex()
                     .size_full()
-                    .child(self.render_search_bar(cx))
+                    .when(!self.embedded, |this| {
+                        this.child(self.render_search_bar(cx))
+                    })
                     .child(div().flex_1().child(content)),
             )
             .children(self.context_menu.as_ref().map(|context_menu| {

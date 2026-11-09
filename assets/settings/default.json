@@ -1082,6 +1082,11 @@
     "default_width": 240,
   },
   "git_panel": {
+    // Which layout the git panel uses:
+    // "custom": the commit editor on top, the changes below it and collapsible
+    //           graph, history and repositories sections at the bottom.
+    // "classic": Zed's own layout, with the commit editor at the bottom.
+    "layout": "custom",
     // Whether to show the git panel button in the status bar.
     "button": true,
     // Where to dock the git panel. Can be 'left' or 'right'.

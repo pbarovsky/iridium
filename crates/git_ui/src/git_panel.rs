@@ -108,6 +108,8 @@ use zed_actions::{
     workspace::{CopyPath, CopyRelativePath},
 };
 
+mod vscode_layout;
+
 const GIT_PANEL_KEY: &str = "GitPanel";
 const UPDATE_DEBOUNCE: Duration = Duration::from_millis(50);
 const RECENT_COMMIT_COUNT: usize = 3;
@@ -1231,6 +1233,7 @@ pub struct GitPanel {
     history_keyboard_nav: bool,
     _commit_message_buffer_subscription: Option<Subscription>,
     _repo_subscriptions: Vec<Subscription>,
+    vscode_layout: vscode_layout::VsCodeLayout,
     _settings_subscription: Subscription,
     git_access: Option<GitAccess>,
     commit_menu_handle: PopoverMenuHandle<ContextMenu>,
@@ -1568,6 +1571,7 @@ impl GitPanel {
                 history_keyboard_nav: false,
                 _commit_message_buffer_subscription: None,
                 _repo_subscriptions: Vec::new(),
+                vscode_layout: Default::default(),
                 _settings_subscription,
                 git_access: None,
                 commit_menu_handle: PopoverMenuHandle::default(),
@@ -9568,6 +9572,12 @@ impl GitPanel {
 
 impl Render for GitPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let vscode_layout = Self::uses_vscode_layout(cx);
+        if vscode_layout {
+            self.sync_vscode_sections(window, cx);
+        } else {
+            self.release_vscode_sections();
+        }
         let project = self.project.read(cx);
         let has_entries = !self.entries.is_empty();
         let has_write_access = self.has_write_access(cx);
@@ -9661,10 +9671,14 @@ impl Render for GitPanel {
             .child(
                 v_flex()
                     .size_full()
-                    .when(!self.commit_editor_expanded, |this| {
+                    .when(vscode_layout, |this| {
+                        this.child(self.render_vscode_layout(window, cx))
+                    })
+                    .when(!self.commit_editor_expanded && !vscode_layout, |this| {
                         this.child(self.render_tab_bar(cx))
                     })
                     .map(|this| match self.active_tab {
+                        _ if vscode_layout => this,
                         GitPanelTab::Changes => this
                             .children(self.render_changes_header(window, cx))
                             .when(!self.commit_editor_expanded, |this| {

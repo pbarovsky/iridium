@@ -6491,9 +6491,23 @@ fn panels_page() -> SettingsPage {
         ]
     }
 
-    fn git_panel_section() -> [SettingsPageItem; 18] {
+    fn git_panel_section() -> [SettingsPageItem; 19] {
         [
             SettingsPageItem::SectionHeader("Git Panel"),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Layout",
+                description: "Custom puts the commit editor on top and the graph, history and repositories in collapsible sections, like VS Code. Classic is Zed's own layout.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("git_panel.layout"),
+                    pick: |settings_content| settings_content.git_panel.as_ref()?.layout.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.git_panel.get_or_insert_default().layout = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Git Panel Dock",
                 description: "Where to dock the Git panel.",
