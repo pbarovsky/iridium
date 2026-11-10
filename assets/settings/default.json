@@ -1006,6 +1006,9 @@
   "extensions_panel": {
     // Whether to show the extensions panel button in the activity bar
     "button": true,
+    // Whether to show the number of available extension updates on the
+    // extensions panel button
+    "show_count_badge": true,
   },
   "outline_panel": {
     // Whether to show the outline panel button in the status bar

@@ -43,9 +43,10 @@ pub fn set_ask_before_downloading(ask: bool) {
 
 /// Asks the user whether Zed may download `subject`, e.g. "the vtsls
 /// language server", before it installs something for the first time.
-/// Resolves to false while offline, and to true when Zed isn't set to ask.
+/// Resolves to false while offline or without a network, and to true when Zed
+/// isn't set to ask.
 pub async fn ask_to_download(subject: impl Into<String>) -> bool {
-    if is_offline() {
+    if is_offline() || !is_network_available() {
         return false;
     }
     if !ASK_BEFORE_DOWNLOADING.load(Ordering::Relaxed) {
@@ -69,6 +70,31 @@ pub async fn ask_to_download(subject: impl Into<String>) -> bool {
 /// Keeps Zed offline for the rest of the session, whatever the settings say.
 pub fn force_offline() {
     FORCED_OFFLINE.store(true, Ordering::Relaxed);
+}
+
+/// Whether this machine has a route to the internet, as last checked.
+static NETWORK_AVAILABLE: AtomicBool = AtomicBool::new(true);
+
+/// Checks whether this machine has a route to the internet, without sending
+/// anything: connecting a UDP socket only looks up a route.
+pub fn probe_network() -> bool {
+    use std::net::UdpSocket;
+    [
+        ("0.0.0.0:0", "1.1.1.1:53"),
+        ("[::]:0", "[2606:4700:4700::1111]:53"),
+    ]
+    .iter()
+    .any(|(local, remote)| {
+        UdpSocket::bind(local).is_ok_and(|socket| socket.connect(remote).is_ok())
+    })
+}
+
+pub fn set_network_available(available: bool) {
+    NETWORK_AVAILABLE.store(available, Ordering::Relaxed);
+}
+
+pub fn is_network_available() -> bool {
+    NETWORK_AVAILABLE.load(Ordering::Relaxed)
 }
 
 /// Whether `--offline` or `ZED_OFFLINE` keeps Zed offline this session.

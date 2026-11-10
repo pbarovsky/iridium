@@ -215,6 +215,8 @@ pub enum IconName {
     MicMute,
     Minimize,
     Notepad,
+    NotificationBell,
+    NotificationBellDot,
     OnCall,
     Option,
     PageDown,

@@ -1239,6 +1239,11 @@ pub struct ExtensionsPanelSettingsContent {
     ///
     /// Default: true
     pub button: Option<bool>,
+    /// Whether to show the number of available extension updates on the
+    /// extensions panel button.
+    ///
+    /// Default: true
+    pub show_count_badge: Option<bool>,
 }
 
 #[with_fallible_options]

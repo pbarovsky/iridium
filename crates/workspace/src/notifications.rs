@@ -22,6 +22,36 @@ use util::ResultExt;
 #[derive(Default)]
 pub struct Notifications {
     notifications: Vec<(NotificationId, AnyView)>,
+    /// Notifications closed without being answered, newest last, kept for the
+    /// notification center.
+    closed: Vec<(NotificationId, AnyView)>,
+}
+
+/// How many closed notifications the notification center keeps.
+const MAX_CLOSED_NOTIFICATIONS: usize = 50;
+
+/// Notifications whose dismissal is an answer (one of their buttons was
+/// clicked), so they aren't kept in the notification center.
+static ANSWERED_NOTIFICATIONS: LazyLock<Mutex<collections::HashSet<gpui::EntityId>>> =
+    LazyLock::new(Default::default);
+
+/// Marks a notification as answered, before it emits [`DismissEvent`], so it's
+/// dropped instead of kept in the notification center.
+pub fn mark_notification_answered(notification: gpui::EntityId) {
+    ANSWERED_NOTIFICATIONS.lock().insert(notification);
+}
+
+/// Notifications in a notification center, which draws them as rows of its
+/// list rather than as floating cards.
+static NOTIFICATIONS_IN_CENTER: LazyLock<Mutex<collections::HashSet<gpui::EntityId>>> =
+    LazyLock::new(Default::default);
+
+pub fn is_in_notification_center(notification: gpui::EntityId) -> bool {
+    NOTIFICATIONS_IN_CENTER.lock().contains(&notification)
+}
+
+fn take_answered(notification: gpui::EntityId) -> bool {
+    ANSWERED_NOTIFICATIONS.lock().remove(&notification)
 }
 
 impl Deref for Notifications {
@@ -104,8 +134,14 @@ impl Workspace {
             let notification = build_notification(cx);
             cx.subscribe(&notification, {
                 let id = id.clone();
-                move |this, _, _: &DismissEvent, cx| {
-                    this.dismiss_notification(&id, cx);
+                move |this, notification, _: &DismissEvent, cx| {
+                    // Closing a closed notification, from the notification
+                    // center, discards it.
+                    if take_answered(notification.entity_id()) || this.is_notification_closed(&id) {
+                        this.dismiss_notification(&id, cx);
+                    } else {
+                        this.close_notification(&id, cx);
+                    }
                 }
             })
             .detach();
@@ -191,6 +227,56 @@ impl Workspace {
                 true
             }
         });
+        self.notifications.closed.retain(|(existing_id, view)| {
+            if existing_id == id {
+                NOTIFICATIONS_IN_CENTER.lock().remove(&view.entity_id());
+                cx.notify();
+                false
+            } else {
+                true
+            }
+        });
+    }
+
+    /// Hides a notification, keeping it in the notification center, where it
+    /// can still be answered.
+    pub fn close_notification(&mut self, id: &NotificationId, cx: &mut Context<Self>) {
+        let Some(index) = self
+            .notifications
+            .iter()
+            .position(|(existing_id, _)| existing_id == id)
+        else {
+            return;
+        };
+        let notification = self.notifications.remove(index);
+        let mut in_center = NOTIFICATIONS_IN_CENTER.lock();
+        in_center.insert(notification.1.entity_id());
+        let closed = &mut self.notifications.closed;
+        closed.retain(|(existing_id, view)| {
+            let keep = existing_id != id;
+            if !keep {
+                in_center.remove(&view.entity_id());
+            }
+            keep
+        });
+        closed.push(notification);
+        if closed.len() > MAX_CLOSED_NOTIFICATIONS {
+            let (_, oldest) = closed.remove(0);
+            in_center.remove(&oldest.entity_id());
+        }
+        cx.notify();
+    }
+
+    pub fn is_notification_closed(&self, id: &NotificationId) -> bool {
+        self.notifications
+            .closed
+            .iter()
+            .any(|(existing_id, _)| existing_id == id)
+    }
+
+    /// Notifications closed without being answered, newest last.
+    pub fn closed_notifications(&self) -> &[(NotificationId, AnyView)] {
+        &self.notifications.closed
     }
 
     pub fn show_toast(&mut self, toast: Toast, cx: &mut Context<Self>) {
@@ -300,6 +386,7 @@ impl LanguageServerPrompt {
                 .context("Stream already closed")?;
 
             this.update(cx, |this, cx| {
+                mark_notification_answered(cx.entity_id());
                 this.dismiss_notification(cx);
             });
 
@@ -340,7 +427,9 @@ impl Render for LanguageServerPrompt {
             .occlude()
             .w_full()
             .max_h(vh(0.8, window))
-            .elevation_3(cx)
+            .when(!is_in_notification_center(cx.entity_id()), |this| {
+                this.elevation_3(cx)
+            })
             .overflow_y_scroll()
             .track_scroll(&self.scroll_handle)
             .on_modifiers_changed(cx.listener(|_, _, _, cx| cx.notify()))
@@ -1107,6 +1196,7 @@ pub mod simple_message_notification {
                             if let Some(on_click) = this.primary_on_click.as_ref() {
                                 (on_click)(window, cx)
                             };
+                            super::mark_notification_answered(cx.entity_id());
                             this.dismiss(cx)
                         }))
                         .when_some(self.primary_icon, |button, icon| {
@@ -1127,6 +1217,7 @@ pub mod simple_message_notification {
                             if let Some(on_click) = this.secondary_on_click.as_ref() {
                                 (on_click)(window, cx)
                             };
+                            super::mark_notification_answered(cx.entity_id());
                             this.dismiss(cx)
                         }))
                         .when_some(self.secondary_icon, |button, icon| {
@@ -1231,9 +1322,12 @@ pub mod simple_message_notification {
                         .when(show_close_button, |this| {
                             this.on_modifiers_changed(move |_, _, cx| cx.notify(entity))
                         })
-                        .p_3()
                         .gap_2()
-                        .elevation_3(cx)
+                        .when_else(
+                            super::is_in_notification_center(cx.entity_id()),
+                            |this| this.px_3().py_2(),
+                            |this| this.p_3().elevation_3(cx),
+                        )
                         .child(
                             h_flex()
                                 .gap_4()
@@ -1544,8 +1638,14 @@ pub fn show_app_notification<V: Notification + 'static>(
                     let notification = build_notification(cx);
                     cx.subscribe(&notification, {
                         let id = id.clone();
-                        move |_, _, _: &DismissEvent, cx| {
-                            dismiss_app_notification(&id, cx);
+                        move |workspace: &mut Workspace, notification, _: &DismissEvent, cx| {
+                            if take_answered(notification.entity_id())
+                                || workspace.is_notification_closed(&id)
+                            {
+                                dismiss_app_notification(&id, cx);
+                            } else {
+                                close_app_notification(&id, cx);
+                            }
                         }
                     })
                     .detach();
@@ -1580,6 +1680,28 @@ pub fn show_app_notification<V: Notification + 'static>(
                         }
                     })
                     .ok(); // Doesn't matter if the windows are dropped
+            }
+        }
+    });
+}
+
+/// Hides a notification in all workspaces, keeping it in their notification
+/// centers.
+pub fn close_app_notification(id: &NotificationId, cx: &mut App) {
+    let id = id.clone();
+    cx.defer(move |cx| {
+        GLOBAL_APP_NOTIFICATIONS.lock().remove(&id);
+        for window in cx.windows() {
+            if let Some(multi_workspace) = window.downcast::<MultiWorkspace>() {
+                let id = id.clone();
+                multi_workspace
+                    .update(cx, |multi_workspace, _window, cx| {
+                        for workspace in multi_workspace.workspaces() {
+                            workspace
+                                .update(cx, |workspace, cx| workspace.close_notification(&id, cx));
+                        }
+                    })
+                    .ok();
             }
         }
     });

@@ -1,12 +1,11 @@
 //! The user-facing side of Zed's network policy (see
 //! [`http_client::network_guard`]): notifications asking whether Zed may
 //! download something for the first time, and a status bar indicator while
-//! Zed is offline.
+//! Zed is offline or this machine has no network.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use collections::HashMap;
-use fs::Fs;
 use futures::{
     FutureExt as _, StreamExt as _,
     channel::{mpsc, oneshot},
@@ -14,7 +13,7 @@ use futures::{
 use gpui::{App, AppContext as _, Context, ElementId, IntoElement, Render, Subscription, Window};
 use http_client::network_guard;
 use parking_lot::Mutex;
-use settings::{SettingsStore, update_settings_file};
+use settings::SettingsStore;
 use ui::{Tooltip, prelude::*};
 use workspace::{
     HideStatusItem, ItemHandle, StatusItemView,
@@ -94,6 +93,35 @@ pub fn init(cx: &mut App) {
         }
     })
     .detach();
+
+    watch_network(cx);
+}
+
+/// Checks every few seconds whether this machine has a network, so the status
+/// bar shows when it doesn't.
+fn watch_network(cx: &mut App) {
+    const INTERVAL: Duration = Duration::from_secs(5);
+    cx.spawn(async move |cx| {
+        loop {
+            let available = cx
+                .background_spawn(async { network_guard::probe_network() })
+                .await;
+            if available != network_guard::is_network_available() {
+                log::info!(
+                    "network {}",
+                    if available {
+                        "available"
+                    } else {
+                        "unavailable"
+                    }
+                );
+                network_guard::set_network_available(available);
+                cx.update(|cx| cx.refresh_windows());
+            }
+            cx.background_executor().timer(INTERVAL).await;
+        }
+    })
+    .detach();
 }
 
 fn show_download_prompt(prompt: Arc<OpenPrompt>, cx: &mut App) {
@@ -115,17 +143,15 @@ fn show_download_prompt(prompt: Arc<OpenPrompt>, cx: &mut App) {
     });
 }
 
-/// Shows that Zed is offline, in the status bar. Clicking it goes online,
-/// unless Zed was started offline.
+/// Shows that Zed is offline, in the status bar: while offline mode is on in
+/// settings (or for this session), or while this machine has no network.
 pub struct OfflineIndicator {
-    fs: Arc<dyn Fs>,
     _settings_subscription: Subscription,
 }
 
 impl OfflineIndicator {
-    pub fn new(fs: Arc<dyn Fs>, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            fs,
             _settings_subscription: cx.observe_global::<SettingsStore>(|_, cx| cx.notify()),
         }
     }
@@ -133,31 +159,30 @@ impl OfflineIndicator {
 
 impl Render for OfflineIndicator {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        if !network_guard::is_offline() {
+        let tooltip = if network_guard::is_forced_offline() {
+            "Offline mode is on for this session (--offline or ZED_OFFLINE): nothing is downloaded or checked."
+        } else if network_guard::is_offline() {
+            "Offline mode is on: nothing is downloaded or checked. Turn it off in Settings → Network."
+        } else if !network_guard::is_network_available() {
+            "No network connection."
+        } else {
             return div().into_any_element();
-        }
-        let forced = network_guard::is_forced_offline();
-        let fs = self.fs.clone();
-        Button::new("offline-indicator", "Offline")
-            .label_size(LabelSize::Small)
-            .color(Color::Warning)
-            .start_icon(
+        };
+        h_flex()
+            .id("offline-indicator")
+            .gap_1()
+            .px_1()
+            .child(
                 Icon::new(IconName::Disconnected)
                     .size(IconSize::Small)
                     .color(Color::Warning),
             )
-            .tooltip(Tooltip::text(if forced {
-                "Zed was started offline, with --offline or ZED_OFFLINE, until it restarts."
-            } else {
-                "Zed is offline: nothing is downloaded or checked. Click to go online."
-            }))
-            .when(!forced, |button| {
-                button.on_click(move |_, _, cx| {
-                    update_settings_file(fs.clone(), cx, |settings, _| {
-                        settings.network.get_or_insert_default().offline = Some(false);
-                    });
-                })
-            })
+            .child(
+                Label::new("Offline")
+                    .size(LabelSize::Small)
+                    .color(Color::Warning),
+            )
+            .tooltip(Tooltip::text(tooltip))
             .into_any_element()
     }
 }

@@ -173,6 +173,9 @@ pub struct ExtensionStore {
     pub tasks: Vec<Task<()>>,
     pub(crate) remote_clients: HashMap<EntityId, RemoteClientState>,
     pub(crate) initial_index_load: Shared<Task<()>>,
+    /// The latest versions of installed extensions, as last fetched, which
+    /// the user may update to. Nothing is installed until they choose to.
+    available_updates: Vec<ExtensionMetadata>,
 }
 
 pub(crate) struct RemoteClientState {
@@ -411,6 +414,7 @@ impl ExtensionStore {
 
             remote_clients: HashMap::default(),
             initial_index_load: Task::ready(()).shared(),
+            available_updates: Vec::new(),
         };
 
         // The extensions store maintains an index file, which contains a complete
@@ -469,6 +473,8 @@ impl ExtensionStore {
                 if NetworkSettings::allows_automatic_updates(cx) {
                     this.auto_install_extensions(cx);
                     this.check_for_updates(cx);
+                } else {
+                    this.refresh_available_updates(cx);
                 }
             })
             .ok();
@@ -779,6 +785,44 @@ impl ExtensionStore {
             }
         })
         .detach();
+    }
+
+    /// Fetches which installed extensions have newer versions, without
+    /// installing anything.
+    pub fn refresh_available_updates(&mut self, cx: &mut Context<Self>) {
+        if cfg!(test) || http_client::network_guard::is_offline() {
+            return;
+        }
+        let task = self.fetch_extensions_with_update_available(cx);
+        cx.spawn(async move |this, cx| {
+            let extensions = task.await?;
+            this.update(cx, |this, cx| {
+                this.available_updates = extensions;
+                cx.notify();
+            })
+        })
+        .detach_and_log_err(cx);
+    }
+
+    /// Installed extensions with a newer version available, as last fetched.
+    pub fn available_update_count(&self) -> usize {
+        self.available_updates
+            .iter()
+            .filter(|latest| {
+                self.extension_index
+                    .extensions
+                    .get(&latest.id)
+                    .is_some_and(|installed| {
+                        match (
+                            Version::from_str(&installed.manifest.version),
+                            Version::from_str(&latest.manifest.version),
+                        ) {
+                            (Ok(installed), Ok(latest)) => installed < latest,
+                            _ => installed.manifest.version != latest.manifest.version,
+                        }
+                    })
+            })
+            .count()
     }
 
     pub fn check_for_updates(&mut self, cx: &mut Context<Self>) {

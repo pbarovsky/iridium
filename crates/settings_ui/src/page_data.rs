@@ -4372,7 +4372,7 @@ fn window_and_layout_page() -> SettingsPage {
         ]
     }
 
-    fn activity_bar_section() -> [SettingsPageItem; 10] {
+    fn activity_bar_section() -> [SettingsPageItem; 11] {
         [
             SettingsPageItem::SectionHeader("Activity Bar"),
             SettingsPageItem::SettingItem(SettingItem {
@@ -4490,6 +4490,29 @@ fn window_and_layout_page() -> SettingsPage {
                             .extensions_panel
                             .get_or_insert_default()
                             .button = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Extensions Update Badge",
+                description: "Show the number of available extension updates on the extensions panel button.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("extensions_panel.show_count_badge"),
+                    pick: |settings_content| {
+                        settings_content
+                            .extensions_panel
+                            .as_ref()?
+                            .show_count_badge
+                            .as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .extensions_panel
+                            .get_or_insert_default()
+                            .show_count_badge = value;
                     },
                 }),
                 metadata: None,

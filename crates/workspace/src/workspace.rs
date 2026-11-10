@@ -8,6 +8,7 @@ mod modal_layer;
 mod multi_workspace;
 #[cfg(test)]
 mod multi_workspace_tests;
+pub mod notification_center;
 pub mod notifications;
 pub mod pane;
 pub mod pane_group;
@@ -79,7 +80,7 @@ use language::{Buffer, LanguageRegistry, Rope, language_settings::all_language_s
 pub use modal_layer::*;
 use node_runtime::NodeRuntime;
 use notifications::{
-    DetachAndPromptErr, Notifications, dismiss_app_notification,
+    DetachAndPromptErr, Notifications, close_app_notification,
     simple_message_notification::MessageNotification,
 };
 pub use pane::*;
@@ -9202,8 +9203,8 @@ impl Workspace {
 
     pub fn cancel(&mut self, _: &menu::Cancel, window: &mut Window, cx: &mut Context<Self>) {
         if cx.stop_active_drag(window) {
-        } else if let Some((notification_id, _)) = self.notifications.pop() {
-            dismiss_app_notification(&notification_id, cx);
+        } else if let Some((notification_id, _)) = self.notifications.last() {
+            close_app_notification(&notification_id.clone(), cx);
         } else {
             cx.propagate();
         }
