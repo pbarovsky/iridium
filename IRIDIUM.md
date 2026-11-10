@@ -1,7 +1,7 @@
 # Iridium — чем этот форк отличается от Zed
 
 Iridium — форк редактора [Zed](https://github.com/zed-industries/zed) (репозиторий
-`github.com/pbarovsky/zed`, рабочая ветка `dev`). Цель — редактор с низким
+`github.com/pbarovsky/zed`, основная ветка `iridium`). Цель — редактор с низким
 потреблением ресурсов Zed и привычным интерфейсом VS Code, без аккаунтов, телеметрии
 и фоновой сетевой активности.
 
@@ -9,7 +9,10 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
 поведения записывается сюда в том же изменении**, в котором сделана (см. правило в
 `.rules`).
 
-Последний общий коммит с Zed: `8fa085e397`.
+Синхронизация с Zed: remote `upstream` (github.com/zed-industries/zed), ветка `main`
+вливается в `iridium` (`git fetch upstream main && git merge upstream/main`).
+Последнее слияние: 2026-11-10, `upstream/main` = `b1962f7cd8`. При конфликтах приоритет у
+изменений форка, улучшения Zed (производительность, исправления) принимаются.
 
 ## Принципы
 

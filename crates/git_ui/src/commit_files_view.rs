@@ -46,7 +46,8 @@ use crate::{
     commit_view::{GitBlob, build_buffer, build_buffer_diff, worktree_id_for_repo_path},
     git_graph::{
         COPIED_STATE_DURATION, ChangedFileEntry, ChangedFileTreeEntry, ChangedFilesViewMode,
-        CopiedState, TREE_INDENT, build_changed_file_tree_entries, format_timestamp,
+        CopiedState, GitGraphSettings, TREE_INDENT, build_changed_file_tree_entries,
+        format_timestamp,
     },
     git_panel_settings::GitPanelSettings,
     git_status_icon,
@@ -589,7 +590,11 @@ impl CommitFilesView {
                     .child(avatar)
                     .child(Label::new(self.commit.author_name.clone()).mt_1p5())
                     .child(
-                        Label::new(format_timestamp(self.commit.commit_timestamp))
+                        Label::new(format_timestamp(
+                            self.commit.commit_timestamp,
+                            GitGraphSettings::get_global(cx).date_style,
+                            cx,
+                        ))
                             .color(Color::Muted)
                             .size(LabelSize::Small),
                     ),
