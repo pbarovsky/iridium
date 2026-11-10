@@ -6,7 +6,7 @@ use gpui::{
     Pixels, Render, SharedString, Styled, Subscription, Task, WeakEntity, Window, px,
 };
 use settings::{ActivityBarPosition, Settings as _, SettingsStore};
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 use ui::{
     ButtonSize, ContextMenu, ContextMenuEntry, CountBadge, Icon, IconButton, IconName, IconSize,
     PopoverMenu, Tab, Tooltip, prelude::*, right_click_menu,
@@ -15,6 +15,8 @@ use util::ResultExt as _;
 
 const DEFAULT_VERTICAL_ICON_SIZE: Pixels = px(20.);
 const HORIZONTAL_ICON_SIZE: Pixels = px(16.);
+/// Status bar buttons are as small as the status bar's other buttons.
+const STATUS_BAR_BUTTON_EXTENT: Pixels = px(20.);
 
 /// Entries are shown in this order by `Panel::panel_key()` until the user drags
 /// them around. Panels not listed come after, in dock order (left dock first).
@@ -126,11 +128,16 @@ pub(crate) fn bar_width(cx: &App) -> Pixels {
 /// A bar with one button per left or right dock panel, like the activity bar in
 /// VS Code. It runs down the left or right edge of the window, or across the top
 /// of the left dock.
+///
+/// A second instance sits at the left end of the status bar and shows the same
+/// buttons there while the activity bar itself is turned off.
 pub struct ActivityBar {
     workspace: WeakEntity<Workspace>,
     left_dock: Entity<Dock>,
     right_dock: Entity<Dock>,
-    order: Vec<String>,
+    /// Shared with the status bar instance, so both show the same order.
+    order: Rc<RefCell<Vec<String>>>,
+    in_status_bar: bool,
     _serialization: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -206,7 +213,7 @@ impl ActivityBar {
                 .and_then(|json| serde_json::from_str::<Vec<String>>(&json).log_err());
             if let Some(order) = stored_order {
                 this.update(cx, |this, cx| {
-                    this.order = order;
+                    *this.order.borrow_mut() = order;
                     cx.notify();
                 })
                 .ok();
@@ -217,7 +224,35 @@ impl ActivityBar {
             workspace,
             left_dock,
             right_dock,
-            order: DEFAULT_ORDER.iter().map(|key| key.to_string()).collect(),
+            order: Rc::new(RefCell::new(
+                DEFAULT_ORDER.iter().map(|key| key.to_string()).collect(),
+            )),
+            in_status_bar: false,
+            _serialization: Task::ready(()),
+            _subscriptions: subscriptions,
+        }
+    }
+
+    /// The instance for the status bar, showing the same buttons as `bar`.
+    pub fn new_for_status_bar(bar: &Entity<Self>, cx: &mut Context<Self>) -> Self {
+        let bar = bar.read(cx);
+        let (workspace, left_dock, right_dock, order) = (
+            bar.workspace.clone(),
+            bar.left_dock.clone(),
+            bar.right_dock.clone(),
+            bar.order.clone(),
+        );
+        let subscriptions = vec![
+            cx.observe(&left_dock, |_, _, cx| cx.notify()),
+            cx.observe(&right_dock, |_, _, cx| cx.notify()),
+            cx.observe_global::<SettingsStore>(|_, cx| cx.notify()),
+        ];
+        Self {
+            workspace,
+            left_dock,
+            right_dock,
+            order,
+            in_status_bar: true,
             _serialization: Task::ready(()),
             _subscriptions: subscriptions,
         }
@@ -248,8 +283,8 @@ impl ActivityBar {
         };
         let dragged = keys.remove(from);
         keys.insert(to, dragged);
-        self.order = keys;
-        let json = serde_json::to_string(&self.order).log_err();
+        let json = serde_json::to_string(&keys).log_err();
+        *self.order.borrow_mut() = keys;
         let kvp = db::kvp::KeyValueStore::global(cx);
         self._serialization = cx.background_spawn(async move {
             if let Some(json) = json {
@@ -260,7 +295,35 @@ impl ActivityBar {
     }
 
     fn position(&self, cx: &App) -> ActivityBarPosition {
+        if self.in_status_bar {
+            return ActivityBarPosition::Top;
+        }
         effective_position(cx).unwrap_or(ActivityBarPosition::Left)
+    }
+
+    fn button_icon_size(&self, window: &Window, cx: &App) -> IconSize {
+        if self.in_status_bar {
+            IconSize::Small
+        } else {
+            icon_size(self.position(cx), window, cx)
+        }
+    }
+
+    fn button_extent(&self, cx: &App) -> Pixels {
+        if self.in_status_bar {
+            STATUS_BAR_BUTTON_EXTENT
+        } else {
+            button_extent(self.position(cx), cx)
+        }
+    }
+
+    /// The status bar is at the bottom of the window, so its menus open upwards.
+    fn menu_anchors(&self, at_start: bool, cx: &App) -> (Anchor, Anchor) {
+        if self.in_status_bar {
+            (Anchor::BottomLeft, Anchor::TopLeft)
+        } else {
+            menu_anchors(at_start, self.position(cx))
+        }
     }
 
     pub fn entries(&self, window: &Window, cx: &App) -> Vec<ActivityBarEntry> {
@@ -288,11 +351,12 @@ impl ActivityBar {
                 });
             }
         }
+        let order = self.order.borrow();
         entries.sort_by_key(|entry| {
-            self.order
+            order
                 .iter()
                 .position(|key| key == entry.key())
-                .unwrap_or(self.order.len())
+                .unwrap_or(order.len())
         });
         entries
     }
@@ -333,8 +397,8 @@ impl ActivityBar {
         let bar_position = self.position(cx);
         let horizontal = bar_position == ActivityBarPosition::Top;
 
-        let icon_size = icon_size(bar_position, window, cx);
-        let extent = button_extent(bar_position, cx);
+        let icon_size = self.button_icon_size(window, cx);
+        let extent = self.button_extent(cx);
         let colors = cx.theme().colors();
         // Like VS Code's modern activity bar: the active entry gets a bordered,
         // filled frame and an accent-colored icon instead of an edge marker.
@@ -389,19 +453,18 @@ impl ActivityBar {
         let dock = entry.dock;
         let panel = entry.panel;
         let workspace = self.workspace.clone();
-        let position = self
-            .order
+        let order = self.order.borrow().clone();
+        let position = order
             .iter()
             .position(|ordered| ordered == key)
-            .unwrap_or(self.order.len());
+            .unwrap_or(order.len());
         let drop_indicator_before = move |dragged: &DraggedActivityBarEntry, order: &[String]| {
             order
                 .iter()
                 .position(|ordered| ordered == dragged.key)
                 .is_none_or(|dragged_position| position < dragged_position)
         };
-        let order = self.order.clone();
-        let (menu_anchor, menu_attach) = menu_anchors(true, bar_position);
+        let (menu_anchor, menu_attach) = self.menu_anchors(true, cx);
         let on_drop = cx.listener(move |this, dragged: &DraggedActivityBarEntry, window, cx| {
             this.move_entry(dragged.key, key, window, cx);
         });
@@ -445,15 +508,15 @@ impl ActivityBar {
     }
 
     fn render_settings_menu(&self, window: &Window, cx: &App) -> impl IntoElement {
-        let position = self.position(cx);
-        let (menu_anchor, menu_attach) = menu_anchors(false, position);
+        let (menu_anchor, menu_attach) = self.menu_anchors(false, cx);
+        let extent = self.button_extent(cx);
         PopoverMenu::new("activity-bar-settings-menu")
             .trigger_with_tooltip(
                 IconButton::new("activity-bar-settings", IconName::ActivitySettings)
                     .size(ButtonSize::Large)
-                    .width(button_extent(position, cx))
-                    .height(button_extent(position, cx).into())
-                    .icon_size(icon_size(position, window, cx))
+                    .width(extent)
+                    .height(extent.into())
+                    .icon_size(self.button_icon_size(window, cx))
                     .icon_color(Color::Muted)
                     .tab_index(0isize)
                     .aria_label("Manage"),
@@ -526,12 +589,24 @@ impl ActivityBar {
 
 impl Render for ActivityBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.in_status_bar && ActivityBarSettings::get_global(cx).show {
+            return div().into_any_element();
+        }
         let buttons: Vec<_> = self
             .entries(window, cx)
             .into_iter()
             .map(|entry| self.render_entry(entry, window, cx))
             .collect();
         let colors = cx.theme().colors();
+
+        if self.in_status_bar {
+            return h_flex()
+                .id("status-bar-activity-buttons")
+                .gap_0p5()
+                .children(buttons)
+                .child(self.render_settings_menu(window, cx))
+                .into_any_element();
+        }
 
         let position = self.position(cx);
         if position == ActivityBarPosition::Top {
@@ -576,5 +651,19 @@ impl Render for ActivityBar {
                 }
             })
             .into_any_element()
+    }
+}
+
+impl crate::StatusItemView for ActivityBar {
+    fn set_active_pane_item(
+        &mut self,
+        _active_pane_item: Option<&dyn crate::ItemHandle>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+
+    fn hide_setting(&self, _: &App) -> Option<crate::HideStatusItem> {
+        None
     }
 }

@@ -1976,9 +1976,7 @@ impl Workspace {
         let left_dock = Dock::new(DockPosition::Left, modal_layer.clone(), window, cx);
         let bottom_dock = Dock::new(DockPosition::Bottom, modal_layer.clone(), window, cx);
         let right_dock = Dock::new(DockPosition::Right, modal_layer.clone(), window, cx);
-        let left_dock_buttons = cx.new(|cx| PanelButtons::new(left_dock.clone(), cx));
         let bottom_dock_buttons = cx.new(|cx| PanelButtons::new(bottom_dock.clone(), cx));
-        let right_dock_buttons = cx.new(|cx| PanelButtons::new(right_dock.clone(), cx));
         let activity_bar = cx.new(|cx| {
             ActivityBar::new(
                 weak_handle.clone(),
@@ -1987,6 +1985,8 @@ impl Workspace {
                 cx,
             )
         });
+        let status_bar_activity_buttons =
+            cx.new(|cx| ActivityBar::new_for_status_bar(&activity_bar, cx));
         let multi_workspace = window
             .root::<MultiWorkspace>()
             .flatten()
@@ -1994,9 +1994,10 @@ impl Workspace {
         let status_bar = cx.new(|cx| {
             let mut status_bar =
                 StatusBar::new(&center_pane.clone(), multi_workspace.clone(), window, cx);
-            status_bar.add_right_item(right_dock_buttons, window, cx);
+            // The side docks' buttons are in the activity bar, or at the left end
+            // of the status bar while the activity bar is turned off.
+            status_bar.add_left_item(status_bar_activity_buttons, window, cx);
             status_bar.add_right_item(bottom_dock_buttons, window, cx);
-            status_bar.add_right_item(left_dock_buttons, window, cx);
             status_bar
         });
 

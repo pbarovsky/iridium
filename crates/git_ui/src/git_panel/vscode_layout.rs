@@ -8,21 +8,29 @@
 //!
 //! The graph and the history read the same git log, which the repository loads
 //! once in the background and caches. The graph view only exists while its
-//! section is open, and the history only keeps the commits it shows: it pages
-//! through the log instead of copying all of it on every update.
+//! section is open, and the history only keeps the commits scrolled through so
+//! far: it takes the next page of the log as the list nears its end instead of
+//! copying the whole log on every update.
+//!
+//! Which sections are open and how tall they are is remembered across restarts.
 
 use super::*;
 use crate::git_graph::GitGraph;
-use gpui::{EntityId, FontWeight};
+use gpui::{Bounds, DragMoveEvent, EntityId, FontWeight};
+use serde::{Deserialize, Serialize};
 use settings::GitPanelLayout;
 
-/// How many commits the history section shows at first, and how many more each
-/// "Load More" adds.
-const HISTORY_PAGE_SIZE: usize = 50;
-const GRAPH_SECTION_HEIGHT: Pixels = px(220.);
-const HISTORY_SECTION_HEIGHT: Pixels = px(220.);
-const REPOSITORIES_SECTION_MAX_HEIGHT: Pixels = px(160.);
+/// How many commits of the log the history section takes at a time.
+const HISTORY_PAGE_SIZE: usize = 100;
+/// The next page is taken once fewer than this many rows are left to scroll,
+/// so scrolling doesn't run into the end.
+const HISTORY_PRELOAD_ROWS: usize = 30;
 const SECTION_HEADER_HEIGHT: Pixels = px(22.);
+const MIN_SECTION_HEIGHT: f32 = 60.;
+/// Room left for the commit editor and the changes when a section is resized.
+const MIN_REST_OF_PANEL_HEIGHT: f32 = 200.;
+const SASH_HEIGHT: Pixels = px(6.);
+const LAYOUT_KEY: &str = "git_panel_vscode_layout";
 const COMMIT_BUTTON_HEIGHT: Pixels = px(28.);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -51,24 +59,52 @@ struct HistoryPage {
     _repository_subscription: Subscription,
 }
 
-pub(super) struct VsCodeLayout {
+/// Dragged to resize the section whose header it sits on.
+struct DraggedSectionSash(VsCodeSection);
+
+/// The part of the layout remembered across restarts.
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(default)]
+struct StoredLayout {
     last_commit_expanded: bool,
     graph_expanded: bool,
     history_expanded: bool,
     repositories_expanded: bool,
-    graph: Option<EmbeddedGraph>,
-    history: Option<HistoryPage>,
+    graph_height: f32,
+    history_height: f32,
+    repositories_height: f32,
 }
 
-impl Default for VsCodeLayout {
+impl Default for StoredLayout {
     fn default() -> Self {
         Self {
             last_commit_expanded: false,
             graph_expanded: false,
             history_expanded: false,
             repositories_expanded: false,
+            graph_height: 220.,
+            history_height: 220.,
+            repositories_height: 120.,
+        }
+    }
+}
+
+pub(super) struct VsCodeLayout {
+    stored: StoredLayout,
+    restore_started: bool,
+    graph: Option<EmbeddedGraph>,
+    history: Option<HistoryPage>,
+    _serialization: Task<()>,
+}
+
+impl Default for VsCodeLayout {
+    fn default() -> Self {
+        Self {
+            stored: StoredLayout::default(),
+            restore_started: false,
             graph: None,
             history: None,
+            _serialization: Task::ready(()),
         }
     }
 }
@@ -89,9 +125,13 @@ impl GitPanel {
     /// Creates or drops the graph view and the history subscription so they
     /// match the open sections and the active repository and branch.
     pub(super) fn sync_vscode_sections(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.vscode_layout.restore_started {
+            self.vscode_layout.restore_started = true;
+            self.restore_vscode_layout(cx);
+        }
         let source = self.section_source(cx);
 
-        if self.vscode_layout.graph_expanded {
+        if self.vscode_layout.stored.graph_expanded {
             let up_to_date = self
                 .vscode_layout
                 .graph
@@ -119,7 +159,7 @@ impl GitPanel {
             }
         }
 
-        if self.vscode_layout.history_expanded {
+        if self.vscode_layout.stored.history_expanded {
             let up_to_date = self
                 .vscode_layout
                 .history
@@ -144,8 +184,41 @@ impl GitPanel {
                     });
                 }
                 self.fetch_history_page(cx);
+            } else {
+                // Also catches scrolling by dragging the scrollbar.
+                self.load_more_history_if_near_end(cx);
             }
         }
+    }
+
+    fn restore_vscode_layout(&mut self, cx: &mut Context<Self>) {
+        let kvp = KeyValueStore::global(cx);
+        cx.spawn(async move |this, cx| {
+            let stored = cx
+                .background_spawn(async move { kvp.read_kvp(LAYOUT_KEY) })
+                .await
+                .log_err()
+                .flatten()
+                .and_then(|json| serde_json::from_str::<StoredLayout>(&json).log_err());
+            if let Some(stored) = stored {
+                this.update(cx, |this, cx| {
+                    this.vscode_layout.stored = stored;
+                    cx.notify();
+                })
+                .ok();
+            }
+        })
+        .detach();
+    }
+
+    fn save_vscode_layout(&mut self, cx: &mut Context<Self>) {
+        let Some(json) = serde_json::to_string(&self.vscode_layout.stored).log_err() else {
+            return;
+        };
+        let kvp = KeyValueStore::global(cx);
+        self.vscode_layout._serialization = cx.background_spawn(async move {
+            kvp.write_kvp(LAYOUT_KEY.to_string(), json).await.log_err();
+        });
     }
 
     /// Frees the graph view and the history subscription while the classic
@@ -184,34 +257,95 @@ impl GitPanel {
         self.set_commit_history(commit_history_from_response(entries, is_loading, error), cx);
     }
 
-    fn load_more_history(&mut self, cx: &mut Context<Self>) {
-        if let Some(history) = self.vscode_layout.history.as_mut() {
+    /// Takes the next page of the log once the list is scrolled close to the
+    /// end of the commits taken so far.
+    fn load_more_history_if_near_end(&mut self, cx: &mut Context<Self>) {
+        let Some(history) = self.vscode_layout.history.as_mut() else {
+            return;
+        };
+        let CommitHistory::Loaded(entries) = &self.commit_history else {
+            return;
+        };
+        // Fewer commits than asked for: the log has no more, or is still being
+        // read and the rest comes with its next update.
+        if entries.len() < history.len {
+            return;
+        }
+        let near_end = {
+            let state = self.commit_history_scroll_handle.0.borrow();
+            let Some(size) = state.last_item_size else {
+                return;
+            };
+            let row_height = size.contents.height / entries.len().max(1) as f32;
+            let left_to_scroll = state.base_handle.max_offset().y + state.base_handle.offset().y;
+            left_to_scroll <= row_height * HISTORY_PRELOAD_ROWS as f32
+        };
+        if near_end {
             history.len += HISTORY_PAGE_SIZE;
             self.fetch_history_page(cx);
         }
     }
 
+    fn resize_vscode_section(
+        &mut self,
+        section: VsCodeSection,
+        bounds: Bounds<Pixels>,
+        mouse_y: Pixels,
+        cx: &mut Context<Self>,
+    ) {
+        let stored = &mut self.vscode_layout.stored;
+        let header = f32::from(SECTION_HEADER_HEIGHT);
+        let section_height =
+            |expanded: bool, height: f32| header + if expanded { height } else { 0. };
+        // The sections are stacked at the bottom of the panel, so everything
+        // below the resized one keeps its place.
+        let below = match section {
+            VsCodeSection::LastCommit => return,
+            VsCodeSection::Graph => {
+                section_height(stored.history_expanded, stored.history_height)
+                    + section_height(stored.repositories_expanded, stored.repositories_height)
+            }
+            VsCodeSection::History => {
+                section_height(stored.repositories_expanded, stored.repositories_height)
+            }
+            VsCodeSection::Repositories => 0.,
+        };
+        let max_height =
+            (f32::from(bounds.size.height) - MIN_REST_OF_PANEL_HEIGHT).max(MIN_SECTION_HEIGHT);
+        let height = (f32::from(bounds.bottom() - mouse_y) - header - below)
+            .clamp(MIN_SECTION_HEIGHT, max_height);
+        match section {
+            VsCodeSection::LastCommit => {}
+            VsCodeSection::Graph => stored.graph_height = height,
+            VsCodeSection::History => stored.history_height = height,
+            VsCodeSection::Repositories => stored.repositories_height = height,
+        }
+        cx.notify();
+    }
+
     fn toggle_vscode_section(&mut self, section: VsCodeSection, cx: &mut Context<Self>) {
         let layout = &mut self.vscode_layout;
+        let stored = &mut layout.stored;
         match section {
-            VsCodeSection::LastCommit => layout.last_commit_expanded = !layout.last_commit_expanded,
+            VsCodeSection::LastCommit => stored.last_commit_expanded = !stored.last_commit_expanded,
             VsCodeSection::Graph => {
-                layout.graph_expanded = !layout.graph_expanded;
-                if !layout.graph_expanded {
+                stored.graph_expanded = !stored.graph_expanded;
+                if !stored.graph_expanded {
                     layout.graph = None;
                 }
             }
             VsCodeSection::History => {
-                layout.history_expanded = !layout.history_expanded;
-                if !layout.history_expanded {
+                stored.history_expanded = !stored.history_expanded;
+                if !stored.history_expanded {
                     layout.history = None;
                     self.set_commit_history(CommitHistory::Loading, cx);
                 }
             }
             VsCodeSection::Repositories => {
-                layout.repositories_expanded = !layout.repositories_expanded
+                stored.repositories_expanded = !stored.repositories_expanded
             }
         }
+        self.save_vscode_layout(cx);
         cx.notify();
     }
 
@@ -232,6 +366,15 @@ impl GitPanel {
 
         v_flex()
             .size_full()
+            .on_drag_move::<DraggedSectionSash>(cx.listener(
+                |this, event: &DragMoveEvent<DraggedSectionSash>, _, cx| {
+                    let section = event.drag(cx).0;
+                    this.resize_vscode_section(section, event.bounds, event.event.position.y, cx);
+                },
+            ))
+            .on_drop::<DraggedSectionSash>(cx.listener(|this, _, _, cx| {
+                this.save_vscode_layout(cx);
+            }))
             .children(commit_area)
             .when(self.amend_pending, |this| {
                 this.child(self.render_pending_amend(cx))
@@ -556,8 +699,10 @@ impl GitPanel {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let colors = cx.theme().colors();
+        let resizable = expanded && section != VsCodeSection::LastCommit;
         h_flex()
             .id(id)
+            .relative()
             .flex_none()
             .h(SECTION_HEADER_HEIGHT)
             .w_full()
@@ -588,6 +733,24 @@ impl GitPanel {
             )
             .child(div().flex_1())
             .children(end_slot)
+            // Straddles the header's top border, like the sashes between the
+            // sections of VS Code's panels.
+            .when(resizable, |this| {
+                this.child(
+                    div()
+                        .id(SharedString::from(format!("{id}-sash")))
+                        .absolute()
+                        .top(-SASH_HEIGHT / 2.)
+                        .left_0()
+                        .right_0()
+                        .h(SASH_HEIGHT)
+                        .cursor_row_resize()
+                        .on_click(|_, _, cx| cx.stop_propagation())
+                        .on_drag(DraggedSectionSash(section), |_, _, _, cx| {
+                            cx.new(|_| gpui::Empty)
+                        }),
+                )
+            })
     }
 
     fn render_last_commit_section(
@@ -595,7 +758,7 @@ impl GitPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let expanded = self.vscode_layout.last_commit_expanded;
+        let expanded = self.vscode_layout.stored.last_commit_expanded;
         v_flex()
             .flex_none()
             .child(self.render_section_header(
@@ -612,7 +775,7 @@ impl GitPanel {
     }
 
     fn render_graph_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let expanded = self.vscode_layout.graph_expanded;
+        let expanded = self.vscode_layout.stored.graph_expanded;
         let open_graph = IconButton::new("vscode-open-git-graph", IconName::GitGraph)
             .icon_size(IconSize::Small)
             .tooltip(|_window, cx| {
@@ -637,7 +800,7 @@ impl GitPanel {
             .when(expanded, |this| {
                 this.children(self.vscode_layout.graph.as_ref().map(|graph| {
                     div()
-                        .h(GRAPH_SECTION_HEIGHT)
+                        .h(px(self.vscode_layout.stored.graph_height))
                         .w_full()
                         .overflow_hidden()
                         .child(graph.view.clone())
@@ -650,10 +813,8 @@ impl GitPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let expanded = self.vscode_layout.history_expanded;
-        let can_load_more = self.vscode_layout.history.as_ref().is_some_and(|history| {
-            matches!(&self.commit_history, CommitHistory::Loaded(entries) if entries.len() >= history.len)
-        });
+        let expanded = self.vscode_layout.stored.history_expanded;
+        let height = px(self.vscode_layout.stored.history_height);
 
         v_flex()
             .flex_none()
@@ -668,26 +829,20 @@ impl GitPanel {
             .when(expanded, |this| {
                 this.child(
                     v_flex()
-                        .h(HISTORY_SECTION_HEIGHT)
+                        .id("vscode-history")
+                        .h(height)
                         .w_full()
                         .overflow_hidden()
+                        .on_scroll(
+                            cx.listener(|this, _, _, cx| this.load_more_history_if_near_end(cx)),
+                        )
                         .child(self.render_history_tab(window, cx)),
                 )
-                .when(can_load_more, |this| {
-                    this.child(
-                        div().px_2().pb_1().child(
-                            Button::new("vscode-history-load-more", "Load More")
-                                .full_width()
-                                .label_size(LabelSize::Small)
-                                .on_click(cx.listener(|this, _, _, cx| this.load_more_history(cx))),
-                        ),
-                    )
-                })
             })
     }
 
     fn render_repositories_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let expanded = self.vscode_layout.repositories_expanded;
+        let expanded = self.vscode_layout.stored.repositories_expanded;
         let colors = cx.theme().colors();
         let active_repository = self
             .active_repository
@@ -783,7 +938,7 @@ impl GitPanel {
             .children(rows.map(|rows| {
                 v_flex()
                     .id("vscode-repositories")
-                    .max_h(REPOSITORIES_SECTION_MAX_HEIGHT)
+                    .h(px(self.vscode_layout.stored.repositories_height))
                     .overflow_y_scroll()
                     .children(rows)
             }))

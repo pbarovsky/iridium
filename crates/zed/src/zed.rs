@@ -635,7 +635,8 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
             cx.new(|cx| git_ui::MergeConflictIndicator::new(workspace, cx));
         workspace.status_bar().update(cx, |status_bar, cx| {
             // As in VS Code, only the project, worktree and branch (with its
-            // fetch/push button) are on the left.
+            // fetch/push button) are on the left, after the panel buttons the
+            // workspace puts there while the activity bar is turned off.
             status_bar.add_left_item(project_status_item, window, cx);
             status_bar.add_left_item(git_remote_button, window, cx);
             status_bar.add_right_item(edit_prediction_ui, window, cx);
