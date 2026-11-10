@@ -786,11 +786,6 @@ pub struct GitPanelSettingsContent {
     /// Default: status
     pub group_by: Option<GitPanelGroupBy>,
 
-    /// Which layout the git panel uses.
-    ///
-    /// Default: custom
-    pub layout: Option<GitPanelLayout>,
-
     /// Whether to collapse untracked files in the diff panel.
     ///
     /// Default: false
@@ -874,13 +869,10 @@ pub enum GitPanelCommitEditor {
 pub enum GitPanelClickBehavior {
     /// Open the project diff, showing all changed files.
     #[default]
-    #[strum(serialize = "All Changed Files Together")]
     ProjectDiff,
     /// Open a single-file diff view.
-    #[strum(serialize = "Each File on Its Own")]
     FileDiff,
     /// Open the file in the editor without a diff view.
-    #[strum(serialize = "Just the File, Without a Diff")]
     ViewFile,
 }
 
@@ -925,32 +917,6 @@ pub enum GitPanelGroupBy {
     #[default]
     Status,
     Staging,
-}
-
-/// The layout of the git panel.
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    Default,
-    Serialize,
-    Deserialize,
-    JsonSchema,
-    MergeFrom,
-    PartialEq,
-    Eq,
-    strum::VariantArray,
-    strum::VariantNames,
-)]
-#[serde(rename_all = "snake_case")]
-pub enum GitPanelLayout {
-    /// Zed's own layout, with the commit editor at the bottom and tabs for
-    /// changes and history.
-    Classic,
-    /// A VS Code style layout: the commit editor on top, the changes below it
-    /// and collapsible graph, history and repositories sections at the bottom.
-    #[default]
-    Custom,
 }
 
 #[derive(

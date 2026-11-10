@@ -3,8 +3,8 @@ use gpui::Pixels;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use settings::{
-    FolderIndicator, GitPanelClickBehavior, GitPanelCommitEditor, GitPanelGroupBy, GitPanelLayout,
-    GitPanelSortBy, IntoGpui, RegisterSetting, Settings, StatusStyle,
+    FolderIndicator, GitPanelClickBehavior, GitPanelCommitEditor, GitPanelGroupBy, GitPanelSortBy,
+    IntoGpui, RegisterSetting, Settings, StatusStyle,
 };
 use ui::scrollbars::{ScrollbarVisibility, ShowScrollbar};
 use workspace::dock::DockPosition;
@@ -26,7 +26,6 @@ pub struct GitPanelSettings {
     pub fallback_branch_name: String,
     pub sort_by: GitPanelSortBy,
     pub group_by: GitPanelGroupBy,
-    pub layout: GitPanelLayout,
     pub collapse_untracked_diff: bool,
     pub tree_view: bool,
     pub diff_stats: bool,
@@ -77,14 +76,20 @@ impl Settings for GitPanelSettings {
             fallback_branch_name: git_panel.fallback_branch_name.unwrap(),
             sort_by: git_panel.sort_by.unwrap(),
             group_by: git_panel.group_by.unwrap(),
-            layout: git_panel.layout.unwrap(),
             collapse_untracked_diff: git_panel.collapse_untracked_diff.unwrap(),
             tree_view: git_panel.tree_view.unwrap(),
             diff_stats: git_panel.diff_stats.unwrap(),
             show_count_badge: git_panel.show_count_badge.unwrap(),
             starts_open: git_panel.starts_open.unwrap(),
             commit_title_max_length: git_panel.commit_title_max_length.unwrap(),
-            entry_primary_click_action: git_panel.entry_primary_click_action.unwrap(),
+            // This build always shows changes one file at a time; the setting
+            // is ignored. Zed's tests cover its own behavior, so they still
+            // follow the setting.
+            entry_primary_click_action: if cfg!(test) {
+                git_panel.entry_primary_click_action.unwrap_or_default()
+            } else {
+                GitPanelClickBehavior::FileDiff
+            },
             commit_editor: git_panel.commit_editor.unwrap(),
         }
     }

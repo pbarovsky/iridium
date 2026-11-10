@@ -112,29 +112,7 @@ impl SoloDiffView {
                     )
                 });
 
-                // Like VS Code's preview, clicking through changed files reuses
-                // one tab instead of opening a tab per file. A pinned tab, or
-                // one with unsaved edits, is kept.
-                let pane = workspace.active_pane().clone();
-                let reusable = pane.read(cx).items().enumerate().find_map(|(index, item)| {
-                    let solo_diff = item.downcast::<SoloDiffView>()?;
-                    let pane = pane.read(cx);
-                    (index >= pane.pinned_count() && !item.is_dirty(cx))
-                        .then(|| (index, solo_diff.item_id()))
-                });
-                match reusable {
-                    Some((index, item_id)) => pane.update(cx, |pane, cx| {
-                        pane.remove_item(item_id, false, false, window, cx);
-                        pane.add_item(Box::new(view.clone()), true, true, Some(index), window, cx);
-                    }),
-                    None => workspace.add_item_to_active_pane(
-                        Box::new(view.clone()),
-                        None,
-                        true,
-                        window,
-                        cx,
-                    ),
-                }
+                workspace.add_item_to_active_pane(Box::new(view.clone()), None, true, window, cx);
                 view
             })
         })
@@ -182,6 +160,9 @@ impl SoloDiffView {
         let mut previous_diff_view_style = EditorSettings::get_global(cx).diff_view_style;
         let settings_subscription =
             cx.observe_global_in::<SettingsStore>(window, move |this, window, cx| {
+                // Full file or changes only is one choice for all file diffs.
+                let show_full_file = EditorSettings::get_global(cx).file_diff.show_full_file;
+                this.set_showing_full_file(show_full_file, cx);
                 let diff_view_style = EditorSettings::get_global(cx).diff_view_style;
                 if diff_view_style != previous_diff_view_style {
                     this.editor.update(cx, |editor, cx| {
@@ -207,7 +188,7 @@ impl SoloDiffView {
         }
     }
 
-    fn build_multibuffer(
+    pub(crate) fn build_multibuffer(
         buffer: Entity<Buffer>,
         diff: Entity<buffer_diff::BufferDiff>,
         showing_full_file: bool,
@@ -222,7 +203,7 @@ impl SoloDiffView {
         multibuffer
     }
 
-    fn excerpt_ranges(
+    pub(crate) fn excerpt_ranges(
         buffer: &Entity<Buffer>,
         diff: &Entity<buffer_diff::BufferDiff>,
         showing_full_file: bool,
@@ -577,6 +558,54 @@ impl Render for SoloDiffView {
     }
 }
 
+/// Saves whether file diffs show the full file or changes only. Like unified or
+/// split, it is one choice for every file diff, which all follow the setting.
+pub(crate) fn save_show_full_file(
+    show_full_file: bool,
+    workspace: &WeakEntity<Workspace>,
+    cx: &mut App,
+) {
+    let Some(workspace) = workspace.upgrade() else {
+        return;
+    };
+    let fs = workspace.read(cx).app_state().fs.clone();
+    cx.update_global::<SettingsStore, _>(|store, _| {
+        store.update_settings_file(fs, move |settings, _| {
+            settings
+                .git
+                .get_or_insert_default()
+                .file_diff
+                .get_or_insert_default()
+                .show_full_file = Some(show_full_file);
+        });
+    });
+}
+
+/// Two buttons, like the unified and split ones next to them, so which of
+/// "changes only" and "full file" is shown is visible at a glance.
+pub(crate) fn render_file_diff_mode_controls(
+    showing_full_file: bool,
+    on_change: impl Fn(bool, &mut App) + Clone + 'static,
+) -> impl IntoElement {
+    let show_changes_only = on_change.clone();
+    h_flex()
+        .gap_1()
+        .child(
+            IconButton::new("file-diff-changes-only", IconName::FoldVertical)
+                .icon_size(IconSize::Small)
+                .toggle_state(!showing_full_file)
+                .tooltip(Tooltip::text("Show Changes Only"))
+                .on_click(move |_, _, cx| show_changes_only(false, cx)),
+        )
+        .child(
+            IconButton::new("file-diff-full-file", IconName::File)
+                .icon_size(IconSize::Small)
+                .toggle_state(showing_full_file)
+                .tooltip(Tooltip::text("Show Full File"))
+                .on_click(move |_, _, cx| on_change(true, cx)),
+        )
+}
+
 pub struct SoloDiffStyleToolbar {
     solo_diff: Option<WeakEntity<SoloDiffView>>,
 }
@@ -594,11 +623,13 @@ impl SoloDiffStyleToolbar {
         self.solo_diff.as_ref()?.upgrade()
     }
 
-    fn toggle_showing_full_file(&mut self, cx: &mut Context<Self>) {
+    fn set_showing_full_file(&mut self, showing_full_file: bool, cx: &mut Context<Self>) {
         if let Some(solo_diff) = self.solo_diff() {
-            solo_diff.update(cx, |solo_diff, cx| {
-                solo_diff.set_showing_full_file(!solo_diff.showing_full_file, cx);
+            let workspace = solo_diff.update(cx, |solo_diff, cx| {
+                solo_diff.set_showing_full_file(showing_full_file, cx);
+                solo_diff.workspace.clone()
             });
+            save_show_full_file(showing_full_file, &workspace, cx);
         }
     }
 }
@@ -645,23 +676,21 @@ impl Render for SoloDiffStyleToolbar {
         let show_status_icon =
             GitPanelSettings::get_global(cx).status_style != StatusStyle::LabelColor;
 
-        let (expand_icon, expand_tooltip) = if showing_full_file {
-            (IconName::ChevronDownUp, "Show Changes Only")
-        } else {
-            (IconName::ChevronUpDown, "Show Full File")
-        };
-
+        let toolbar = cx.weak_entity();
         h_flex()
             .pl_0p5()
             .gap_1()
-            .child(
-                IconButton::new("solo-diff-toggle-excerpts", expand_icon)
-                    .icon_size(IconSize::Small)
-                    .tooltip(Tooltip::text(expand_tooltip))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.toggle_showing_full_file(cx);
-                    })),
-            )
+            .child(render_file_diff_mode_controls(
+                showing_full_file,
+                move |showing_full_file, cx| {
+                    toolbar
+                        .update(cx, |toolbar, cx| {
+                            toolbar.set_showing_full_file(showing_full_file, cx)
+                        })
+                        .ok();
+                },
+            ))
+            .child(Divider::vertical())
             .child(DiffStyleControls::new(editor_entity))
             .child(Divider::vertical().mr_1())
             .when_some(

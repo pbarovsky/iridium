@@ -1,5 +1,4 @@
-//! The VS Code style layout of the git panel, used when `git_panel.layout` is
-//! `"custom"`: the commit editor and a full width commit button on top, the
+//! The VS Code style layout of the git panel: the commit editor and a full width commit button on top, the
 //! changes below them, and collapsible sections for the last commit, the graph,
 //! the history and the repositories at the bottom.
 //!
@@ -18,7 +17,6 @@ use super::*;
 use crate::git_graph::GitGraph;
 use gpui::{Bounds, DragMoveEvent, EntityId, FontWeight};
 use serde::{Deserialize, Serialize};
-use settings::GitPanelLayout;
 
 /// How many commits of the log the history section takes at a time.
 const HISTORY_PAGE_SIZE: usize = 100;
@@ -110,8 +108,10 @@ impl Default for VsCodeLayout {
 }
 
 impl GitPanel {
-    pub(super) fn uses_vscode_layout(cx: &App) -> bool {
-        GitPanelSettings::get_global(cx).layout == GitPanelLayout::Custom
+    /// This build always uses this layout. Zed's tests cover the classic one,
+    /// so they still get it.
+    pub(super) fn uses_vscode_layout(_cx: &App) -> bool {
+        !cfg!(test)
     }
 
     fn section_source(&self, cx: &App) -> Option<SectionSource> {

@@ -1082,11 +1082,6 @@
     "default_width": 240,
   },
   "git_panel": {
-    // Which layout the git panel uses:
-    // "custom": the commit editor on top, the changes below it and collapsible
-    //           graph, history and repositories sections at the bottom.
-    // "classic": Zed's own layout, with the commit editor at the bottom.
-    "layout": "custom",
     // Whether to show the git panel button in the status bar.
     "button": true,
     // Where to dock the git panel. Can be 'left' or 'right'.
@@ -1157,14 +1152,6 @@
     //
     // Default: 0
     "commit_title_max_length": 0,
-    // How changes are shown when clicking a changed file in the Git panel, or a
-    // commit in the history or the graph:
-    // "file_diff": each file on its own and in full, picked from a list of
-    //              the changed files for a commit, like VS Code.
-    // "project_diff": all changed files in one scrolling view, with a few
-    //                 lines around each change, like Zed.
-    // "view_file": just open the file, without a diff.
-    "entry_primary_click_action": "file_diff",
     // Whether the commit message editor is shown in the git panel by default.
     //
     // Choices: expanded, collapsed

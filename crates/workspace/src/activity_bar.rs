@@ -408,6 +408,7 @@ impl ActivityBar {
         } else {
             (gpui::transparent_black(), gpui::transparent_black())
         };
+        let in_status_bar = self.in_status_bar;
         let button = move |is_menu_open: bool| {
             let action = action.boxed_clone();
             let focus_handle = focus_handle.clone();
@@ -415,14 +416,23 @@ impl ActivityBar {
             // Include active state in element ID to invalidate the cached
             // tooltip when panel state changes (e.g., via keyboard shortcut)
             let button = IconButton::new((key, is_active as u64), icon)
-                .size(ButtonSize::Large)
-                .width(extent)
-                .height(extent.into())
                 .icon_size(icon_size)
-                .icon_color(if is_active {
-                    Color::Accent
-                } else {
-                    Color::Muted
+                .map(|button| {
+                    // In the status bar the buttons look like the status bar's
+                    // other panel buttons, which only highlight the active one.
+                    if in_status_bar {
+                        button.toggle_state(is_active)
+                    } else {
+                        button
+                            .size(ButtonSize::Large)
+                            .width(extent)
+                            .height(extent.into())
+                            .icon_color(if is_active {
+                                Color::Accent
+                            } else {
+                                Color::Muted
+                            })
+                    }
                 })
                 .tab_index(0isize)
                 .aria_label(icon_tooltip)
@@ -443,10 +453,12 @@ impl ActivityBar {
                     })
                 });
             div()
-                .rounded(px(6.))
-                .border_1()
-                .border_color(frame_border)
-                .bg(frame_background)
+                .when(!in_status_bar, |this| {
+                    this.rounded(px(6.))
+                        .border_1()
+                        .border_color(frame_border)
+                        .bg(frame_background)
+                })
                 .child(button)
         };
 
@@ -513,9 +525,11 @@ impl ActivityBar {
         PopoverMenu::new("activity-bar-settings-menu")
             .trigger_with_tooltip(
                 IconButton::new("activity-bar-settings", IconName::ActivitySettings)
-                    .size(ButtonSize::Large)
-                    .width(extent)
-                    .height(extent.into())
+                    .when(!self.in_status_bar, |this| {
+                        this.size(ButtonSize::Large)
+                            .width(extent)
+                            .height(extent.into())
+                    })
                     .icon_size(self.button_icon_size(window, cx))
                     .icon_color(Color::Muted)
                     .tab_index(0isize)

@@ -6491,23 +6491,9 @@ fn panels_page() -> SettingsPage {
         ]
     }
 
-    fn git_panel_section() -> [SettingsPageItem; 19] {
+    fn git_panel_section() -> [SettingsPageItem; 17] {
         [
             SettingsPageItem::SectionHeader("Git Panel"),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Layout",
-                description: "Custom puts the commit editor on top and the graph, history and repositories in collapsible sections, like VS Code. Classic is Zed's own layout.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("git_panel.layout"),
-                    pick: |settings_content| settings_content.git_panel.as_ref()?.layout.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.git_panel.get_or_insert_default().layout = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Git Panel Dock",
                 description: "Where to dock the Git panel.",
@@ -6725,29 +6711,6 @@ fn panels_page() -> SettingsPage {
                             .git_panel
                             .get_or_insert_default()
                             .diff_stats = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Show Changes",
-                description: "How clicking a changed file or a commit shows its changes. Each file on its own shows one whole file at a time, picked from a list of the changed files, like VS Code. All changed files together scrolls through every file in one view, with a few lines around each change.",
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("git_panel.entry_primary_click_action"),
-                    pick: |settings_content| {
-                        settings_content
-                            .git_panel
-                            .as_ref()?
-                            .entry_primary_click_action
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .git_panel
-                            .get_or_insert_default()
-                            .entry_primary_click_action = value;
                     },
                 }),
                 metadata: None,

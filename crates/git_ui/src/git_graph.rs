@@ -73,31 +73,31 @@ const LANE_WIDTH: Pixels = px(18.0);
 const LEFT_PADDING: Pixels = px(12.0);
 const LINE_WIDTH: Pixels = px(2.0);
 const RESIZE_HANDLE_WIDTH: f32 = 8.0;
-const COPIED_STATE_DURATION: Duration = Duration::from_secs(2);
+pub(crate) const COPIED_STATE_DURATION: Duration = Duration::from_secs(2);
 const COMMIT_TAG_LIST_WIDTH_IN_REMS: Rems = rems(10.);
-const TREE_INDENT: f32 = 20.0;
+pub(crate) const TREE_INDENT: f32 = 20.0;
 const TABLE_COLUMN_COUNT: usize = 4;
 const REFS_COLUMN_INDEX: usize = 0;
 const GRAPH_COLUMN_INDEX: usize = 1;
 const GRAPH_LAYOUT_TABLE_OFFSET: usize = 2;
 const ROW_VERTICAL_PADDING: Pixels = px(4.0);
 
-struct CopiedState {
+pub(crate) struct CopiedState {
     copied_at: Option<Instant>,
 }
 
 impl CopiedState {
-    fn new(_window: &mut Window, _cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(_window: &mut Window, _cx: &mut Context<Self>) -> Self {
         Self { copied_at: None }
     }
 
-    fn is_copied(&self) -> bool {
+    pub(crate) fn is_copied(&self) -> bool {
         self.copied_at
             .map(|t| t.elapsed() < COPIED_STATE_DURATION)
             .unwrap_or(false)
     }
 
-    fn mark_copied(&mut self) {
+    pub(crate) fn mark_copied(&mut self) {
         self.copied_at = Some(Instant::now());
     }
 }
@@ -212,15 +212,15 @@ impl PickerDelegate for CommitTagPickerDelegate {
 }
 
 #[derive(Clone)]
-struct ChangedFileEntry {
-    status: FileStatus,
-    file_name: SharedString,
-    dir_path: SharedString,
-    repo_path: RepoPath,
+pub(crate) struct ChangedFileEntry {
+    pub(crate) status: FileStatus,
+    pub(crate) file_name: SharedString,
+    pub(crate) dir_path: SharedString,
+    pub(crate) repo_path: RepoPath,
 }
 
 impl ChangedFileEntry {
-    fn from_commit_file(file: &CommitFile, _cx: &App) -> Self {
+    pub(crate) fn from_commit_file(file: &CommitFile, _cx: &App) -> Self {
         let file_name: SharedString = file
             .path
             .file_name()
@@ -321,41 +321,41 @@ impl ChangedFileEntry {
     }
 }
 
-enum ChangedFileTreeEntry {
+pub(crate) enum ChangedFileTreeEntry {
     Directory(ChangedFileDirectoryEntry),
     File(ChangedFileTreeStatusEntry),
 }
 
-struct ChangedFileTreeStatusEntry {
-    entry: ChangedFileEntry,
-    depth: usize,
+pub(crate) struct ChangedFileTreeStatusEntry {
+    pub(crate) entry: ChangedFileEntry,
+    pub(crate) depth: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum ChangedFilesViewMode {
+pub(crate) enum ChangedFilesViewMode {
     Flat,
     #[default]
     Tree,
 }
 
 impl ChangedFilesViewMode {
-    fn toggled(self) -> Self {
+    pub(crate) fn toggled(self) -> Self {
         match self {
             Self::Flat => Self::Tree,
             Self::Tree => Self::Flat,
         }
     }
 
-    fn is_tree(self) -> bool {
+    pub(crate) fn is_tree(self) -> bool {
         matches!(self, Self::Tree)
     }
 }
 
-struct ChangedFileDirectoryEntry {
-    path: RepoPath,
-    name: SharedString,
-    depth: usize,
-    expanded: bool,
+pub(crate) struct ChangedFileDirectoryEntry {
+    pub(crate) path: RepoPath,
+    pub(crate) name: SharedString,
+    pub(crate) depth: usize,
+    pub(crate) expanded: bool,
 }
 
 impl ChangedFileDirectoryEntry {
@@ -414,7 +414,7 @@ struct ChangedFileTreeNode {
     files: Vec<ChangedFileEntry>,
 }
 
-fn build_changed_file_tree_entries(
+pub(crate) fn build_changed_file_tree_entries(
     mut files: Vec<ChangedFileEntry>,
     expanded_dirs: &HashMap<RepoPath, bool>,
 ) -> Vec<ChangedFileTreeEntry> {
@@ -615,7 +615,7 @@ fn timestamp_format() -> &'static [BorrowedFormatItem<'static>] {
     })
 }
 
-fn format_timestamp(timestamp: i64) -> String {
+pub(crate) fn format_timestamp(timestamp: i64) -> String {
     let Ok(datetime) = OffsetDateTime::from_unix_timestamp(timestamp) else {
         return "Unknown".to_string();
     };
@@ -1371,7 +1371,7 @@ fn draw_commit_circle(
     );
 }
 
-fn compute_diff_stats(diff: &CommitDiff) -> (usize, usize) {
+pub(crate) fn compute_diff_stats(diff: &CommitDiff) -> (usize, usize) {
     diff.files.iter().fold((0, 0), |(added, removed), file| {
         let old_text = file.old_text.as_deref().unwrap_or("");
         let new_text = file.new_text.as_deref().unwrap_or("");
@@ -5429,7 +5429,6 @@ mod tests {
         cx.update(|cx| {
             let settings_store = SettingsStore::test(cx);
             cx.set_global(settings_store);
-            crate::commit_files_view::use_zed_git_panel_defaults(cx);
             theme_settings::init(theme::LoadThemes::JustBase, cx);
             language_model::init(cx);
             crate::init(cx);
