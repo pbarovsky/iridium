@@ -6731,8 +6731,8 @@ fn panels_page() -> SettingsPage {
                 files: USER,
             }),
             SettingsPageItem::SettingItem(SettingItem {
-                title: "Primary Click Behavior",
-                description: "Default action when clicking a changed file in the Git panel.",
+                title: "Show Changes",
+                description: "How clicking a changed file or a commit shows its changes. Each file on its own shows one whole file at a time, picked from a list of the changed files, like VS Code. All changed files together scrolls through every file in one view, with a few lines around each change.",
                 field: Box::new(SettingField {
                     organization_override: None,
                     json_path: Some("git_panel.entry_primary_click_action"),

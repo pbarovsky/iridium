@@ -874,10 +874,13 @@ pub enum GitPanelCommitEditor {
 pub enum GitPanelClickBehavior {
     /// Open the project diff, showing all changed files.
     #[default]
+    #[strum(serialize = "All Changed Files Together")]
     ProjectDiff,
     /// Open a single-file diff view.
+    #[strum(serialize = "Each File on Its Own")]
     FileDiff,
     /// Open the file in the editor without a diff view.
+    #[strum(serialize = "Just the File, Without a Diff")]
     ViewFile,
 }
 

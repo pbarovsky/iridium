@@ -112,7 +112,29 @@ impl SoloDiffView {
                     )
                 });
 
-                workspace.add_item_to_active_pane(Box::new(view.clone()), None, true, window, cx);
+                // Like VS Code's preview, clicking through changed files reuses
+                // one tab instead of opening a tab per file. A pinned tab, or
+                // one with unsaved edits, is kept.
+                let pane = workspace.active_pane().clone();
+                let reusable = pane.read(cx).items().enumerate().find_map(|(index, item)| {
+                    let solo_diff = item.downcast::<SoloDiffView>()?;
+                    let pane = pane.read(cx);
+                    (index >= pane.pinned_count() && !item.is_dirty(cx))
+                        .then(|| (index, solo_diff.item_id()))
+                });
+                match reusable {
+                    Some((index, item_id)) => pane.update(cx, |pane, cx| {
+                        pane.remove_item(item_id, false, false, window, cx);
+                        pane.add_item(Box::new(view.clone()), true, true, Some(index), window, cx);
+                    }),
+                    None => workspace.add_item_to_active_pane(
+                        Box::new(view.clone()),
+                        None,
+                        true,
+                        window,
+                        cx,
+                    ),
+                }
                 view
             })
         })
@@ -867,21 +889,21 @@ impl Render for SoloDiffGitToolbar {
             )
             .child(Divider::vertical())
             .child(h_group_sm().child(if button_states.stage_file {
-                Button::new("stage-file", "Stage All")
+                Button::new("stage-file", "Stage File")
                     .width(rems_from_px(80_f32))
                     .disabled(!button_states.stage_file)
                     .tooltip(Tooltip::for_action_title_in(
-                        "Stage All",
+                        "Stage File",
                         &StageFile,
                         &focus_handle,
                     ))
                     .on_click(cx.listener(|this, _, window, cx| this.stage_file(window, cx)))
             } else {
-                Button::new("unstage-file", "Unstage All")
+                Button::new("unstage-file", "Unstage File")
                     .width(rems_from_px(80_f32))
                     .disabled(!button_states.unstage_file)
                     .tooltip(Tooltip::for_action_title_in(
-                        "Unstage All",
+                        "Unstage File",
                         &UnstageFile,
                         &focus_handle,
                     ))

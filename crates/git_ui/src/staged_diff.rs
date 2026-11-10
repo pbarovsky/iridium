@@ -712,6 +712,7 @@ mod tests {
                     settings.editor.diff_view_style = Some(DiffViewStyle::Unified);
                 });
             });
+            crate::commit_files_view::use_zed_git_panel_defaults(cx);
             theme_settings::init(theme::LoadThemes::JustBase, cx);
             editor::init(cx);
             crate::init(cx);

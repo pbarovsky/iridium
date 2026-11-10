@@ -211,6 +211,20 @@ impl CommitView {
         window: &mut Window,
         cx: &mut App,
     ) {
+        if stash.is_none()
+            && !ignore_shallow_boundary
+            && crate::commit_files_view::CommitFilesView::enabled(cx)
+        {
+            crate::commit_files_view::CommitFilesView::open(
+                commit_sha,
+                repo,
+                workspace,
+                file_filter,
+                window,
+                cx,
+            );
+            return;
+        }
         let commit_diff = repo
             .update(cx, |repo, cx| {
                 repo.load_commit_diff(commit_sha.clone(), ignore_shallow_boundary, cx)
@@ -1146,7 +1160,7 @@ pub(crate) async fn build_buffer(
     Ok(buffer)
 }
 
-async fn build_buffer_diff(
+pub(crate) async fn build_buffer_diff(
     mut old_text: Option<String>,
     buffer: &Entity<Buffer>,
     language_registry: &Arc<LanguageRegistry>,

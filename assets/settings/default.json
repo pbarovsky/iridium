@@ -1157,11 +1157,14 @@
     //
     // Default: 0
     "commit_title_max_length": 0,
-    // Default action when clicking a changed file in the Git panel.
-    //
-    // Choices: project_diff, file_diff, view_file
-    // Default: project_diff
-    "entry_primary_click_action": "project_diff",
+    // How changes are shown when clicking a changed file in the Git panel, or a
+    // commit in the history or the graph:
+    // "file_diff": each file on its own and in full, picked from a list of
+    //              the changed files for a commit, like VS Code.
+    // "project_diff": all changed files in one scrolling view, with a few
+    //                 lines around each change, like Zed.
+    // "view_file": just open the file, without a diff.
+    "entry_primary_click_action": "file_diff",
     // Whether the commit message editor is shown in the git panel by default.
     //
     // Choices: expanded, collapsed

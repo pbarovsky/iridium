@@ -5429,6 +5429,7 @@ mod tests {
         cx.update(|cx| {
             let settings_store = SettingsStore::test(cx);
             cx.set_global(settings_store);
+            crate::commit_files_view::use_zed_git_panel_defaults(cx);
             theme_settings::init(theme::LoadThemes::JustBase, cx);
             language_model::init(cx);
             crate::init(cx);
