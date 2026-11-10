@@ -243,6 +243,15 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   (`message_collapsed: false`), а файл показывается один. Решить: подключить
   `expand_description` к нашему виду, а `expand_files` скрыть (или оставить как есть).
 
+- **Git-панель: нельзя отправить коммиты из панели.** После того как всё закоммичено,
+  в VS Code-раскладке (`git_panel/vscode_layout.rs`, `render_vscode_commit_button`)
+  нет способа сделать push — только через кнопку fetch/push/pull в статус-баре.
+  Сделать как в VS Code: когда изменений для коммита нет, а есть неотправленные
+  коммиты, кнопка Commit превращается в «Sync Changes» / «Push» с числом коммитов
+  (`↑N`, а при входящих — `↓M ↑N`); если ветка не опубликована — «Publish Branch».
+  Данные о расхождении с remote уже есть (`status.ahead` / `status.behind`, их
+  показывает секция Repositories).
+
 ## Заметки для разработки
 
 - Пользователь пишет по-русски.
