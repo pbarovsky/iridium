@@ -25,6 +25,19 @@ use util::archive::extract_zip;
 
 const NODE_CA_CERTS_ENV_VAR: &str = "NODE_EXTRA_CA_CERTS";
 
+/// npm talks to its registry by itself, past Zed's HTTP client, so while Zed
+/// is offline its subcommands that use the network aren't run at all.
+fn ensure_npm_may_run(subcommand: &str) -> Result<()> {
+    let uses_network = matches!(
+        subcommand,
+        "install" | "i" | "ci" | "update" | "info" | "view" | "outdated" | "exec" | "search"
+    );
+    if uses_network && http_client::network_guard::is_offline() {
+        anyhow::bail!("Zed is offline, so it didn't run `npm {subcommand}`");
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct NodeBinaryOptions {
     pub allow_path_lookup: bool,
@@ -223,6 +236,7 @@ impl NodeRuntime {
         subcommand: &str,
         args: &[&str],
     ) -> Result<Output> {
+        ensure_npm_may_run(subcommand)?;
         let http = self.0.lock().await.http.clone();
         self.instance()
             .await
@@ -264,6 +278,7 @@ impl NodeRuntime {
         name: &str,
         version_requirement: Option<&VersionReq>,
     ) -> Result<Version> {
+        ensure_npm_may_run("info")?;
         let http = self.0.lock().await.http.clone();
         let instance = self.instance().await;
         let output = instance
@@ -680,6 +695,13 @@ impl ManagedNodeRuntime {
         };
 
         if !valid {
+            let subject = format!(
+                "Node.js {} from nodejs.org, which language servers and agents run on",
+                Self::VERSION
+            );
+            if !http_client::network_guard::ask_to_download(subject).await {
+                bail!("Node.js isn't installed, and downloading it was declined");
+            }
             _ = fs::remove_dir_all(&node_containing_dir).await;
             fs::create_dir(&node_containing_dir)
                 .await

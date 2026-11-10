@@ -769,6 +769,17 @@ impl nodejs::Host for WasmState {
         &mut self,
         package_name: String,
     ) -> wasmtime::Result<Result<String, String>> {
+        // Without background updates, an installed package counts as the latest
+        // version, so the extension keeps using it instead of checking npm.
+        if !::http_client::network_guard::allows_automatic_updates()
+            && let Ok(Some(installed)) = self
+                .host
+                .node_runtime
+                .npm_package_installed_version(&self.work_dir(), &package_name)
+                .await
+        {
+            return Ok(Ok(installed.to_string()));
+        }
         self.host
             .node_runtime
             .npm_package_latest_version(&package_name)
@@ -797,6 +808,29 @@ impl nodejs::Host for WasmState {
         self.capability_granter
             .grant_npm_install_package(&package_name)
             .into_wasmtime_result()?;
+
+        let installed = matches!(
+            self.host
+                .node_runtime
+                .npm_package_installed_version(&self.work_dir(), &package_name)
+                .await,
+            Ok(Some(_))
+        );
+        // Without background updates, an installed package is kept as it is.
+        if installed && !::http_client::network_guard::allows_automatic_updates() {
+            return Ok(Ok(()));
+        }
+        if !installed {
+            let subject = format!(
+                "the {package_name} npm package for the {} extension",
+                self.manifest.name
+            );
+            if !::http_client::network_guard::ask_to_download(subject).await {
+                return Ok(Err(format!(
+                    "{package_name} isn't installed, and downloading it was declined"
+                )));
+            }
+        }
 
         self.host
             .node_runtime
@@ -834,6 +868,16 @@ impl github::Host for WasmState {
         repo: String,
         options: github::GithubReleaseOptions,
     ) -> wasmtime::Result<Result<github::GithubRelease, String>> {
+        // Asking for the latest release is how extensions check for updates.
+        // Without background updates, an extension that already downloaded
+        // something keeps using it, as it does when GitHub can't be reached.
+        let has_downloads =
+            std::fs::read_dir(self.work_dir()).is_ok_and(|mut entries| entries.next().is_some());
+        if has_downloads && !::http_client::network_guard::allows_automatic_updates() {
+            return Ok(Err(format!(
+                "background updates are off, so Zed didn't check {repo} for a new release"
+            )));
+        }
         maybe!(async {
             let release = ::github_releases::latest_github_release(
                 &repo,
@@ -1082,6 +1126,19 @@ impl ExtensionImports for WasmState {
         maybe!(async {
             let parsed_url = Url::parse(&url)?;
             self.capability_granter.grant_download_file(&parsed_url)?;
+            let file_name = parsed_url
+                .path_segments()
+                .and_then(|mut segments| segments.next_back())
+                .unwrap_or_default();
+            let subject = format!(
+                "{file_name} from {} for the {} extension",
+                parsed_url.host_str().unwrap_or_default(),
+                self.manifest.name
+            );
+            anyhow::ensure!(
+                ::http_client::network_guard::ask_to_download(subject).await,
+                "downloading {url} was declined"
+            );
 
             let path = PathBuf::from(path);
             let extension_work_dir = self.host.work_dir.join(self.manifest.id.as_ref());

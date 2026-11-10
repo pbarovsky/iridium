@@ -911,6 +911,15 @@ async fn install_prettier_packages(
         .chain(Some("prettier".to_string()))
         .collect::<Vec<_>>();
 
+    let subject = format!(
+        "{} from npm, to format files with prettier",
+        packages_to_install.join(", ")
+    );
+    anyhow::ensure!(
+        http_client::network_guard::ask_to_download(subject).await,
+        "installing prettier was declined"
+    );
+
     let default_prettier_dir = default_prettier_dir().as_path();
     match fs.metadata(default_prettier_dir).await.with_context(|| {
         format!("fetching FS metadata for default prettier dir {default_prettier_dir:?}")

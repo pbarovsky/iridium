@@ -15,7 +15,7 @@ use serde::Deserialize;
 use settings::Settings as _;
 use util::ResultExt;
 
-use crate::{AgentId, DisableAiSettings};
+use crate::{AgentId, DisableAiSettings, project_settings::NetworkSettings};
 
 const REGISTRY_URL: &str = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 const REFRESH_THROTTLE_DURATION: Duration = Duration::from_secs(60 * 60);
@@ -147,8 +147,10 @@ impl AgentRegistryStore {
         let store = cx.new(|cx| Self::new(fs, http_client, cx));
         cx.set_global(GlobalAgentRegistryStore(store.clone()));
 
+        // Without background updates, the cached registry is used once it's
+        // loaded, and only fetched if there is none (see `load_cached_registry`).
         store.update(cx, |store, cx| {
-            if store.agents.is_empty() {
+            if store.agents.is_empty() && NetworkSettings::allows_automatic_updates(cx) {
                 store.refresh(cx);
             }
         });
@@ -211,7 +213,7 @@ impl AgentRegistryStore {
             return;
         }
 
-        if DisableAiSettings::get_global(cx).disable_ai {
+        if DisableAiSettings::get_global(cx).disable_ai || NetworkSettings::is_offline(cx) {
             return;
         }
 
@@ -267,6 +269,11 @@ impl AgentRegistryStore {
     /// updates without making too many network requests. The refresh is
     /// throttled to at most once per hour.
     pub fn refresh_if_stale(&mut self, cx: &mut Context<Self>) {
+        // Checking for newer agents is a background update; the registry is
+        // only fetched when there is none (see `load_cached_registry`).
+        if !NetworkSettings::allows_automatic_updates(cx) {
+            return;
+        }
         let should_refresh = self
             .last_refresh
             .map(|last| last.elapsed() >= REFRESH_THROTTLE_DURATION)
@@ -306,6 +313,13 @@ impl AgentRegistryStore {
         cx.spawn(async move |this, cx| -> Result<()> {
             let cache_path = registry_cache_path();
             if !fs.is_file(&cache_path).await {
+                // Nothing cached yet, so fetch the registry once, which is
+                // what `init_global` leaves to this without background updates.
+                this.update(cx, |this, cx| {
+                    if !NetworkSettings::allows_automatic_updates(cx) {
+                        this.refresh(cx);
+                    }
+                })?;
                 return Ok(());
             }
 

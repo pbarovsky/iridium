@@ -342,7 +342,7 @@ impl ExtensionCard {
                 let upgrade = matches!(status, ExtensionStatus::Upgrading).then(|| {
                     Button::new(
                         Self::button_id(&extension.id, ExtensionOperation::Upgrade),
-                        "Upgrade",
+                        "Update",
                     )
                     .disabled(Self::disables_actions(status))
                 });
@@ -363,7 +363,7 @@ impl ExtensionCard {
                     );
                     Button::new(
                         Self::button_id(&extension.id, ExtensionOperation::Upgrade),
-                        "Upgrade",
+                        "Update",
                     )
                     .style(ButtonStyle::Tinted(ui::TintColor::Accent))
                     .when(!is_compatible, |button| {
@@ -397,7 +397,13 @@ impl ExtensionCard {
                     Self::configure_button(&extension.id, None).style(ButtonStyle::OutlinedGhost)
                 });
 
-                [upgrade, configure, Some(uninstall)]
+                // With an update available, Update takes the place of Uninstall, which
+                // stays in the card's menu.
+                if upgrade.is_some() {
+                    [None, configure, upgrade]
+                } else {
+                    [None, configure, Some(uninstall)]
+                }
             }
         }
     }

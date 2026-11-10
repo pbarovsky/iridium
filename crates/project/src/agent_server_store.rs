@@ -1,3 +1,4 @@
+use crate::project_settings::NetworkSettings;
 use std::{
     any::Any,
     path::{Path, PathBuf},
@@ -1379,6 +1380,8 @@ impl ExternalAgentServer for LocalRegistryNpxAgent {
         let args = self.args.clone();
         let distribution_env = self.distribution_env.clone();
         let settings_env = self.settings_env.clone();
+        let allows_automatic_updates =
+            cx.update(|cx| NetworkSettings::allows_automatic_updates(cx));
 
         cx.spawn(async move |cx| {
             let mut env = project_environment
@@ -1402,7 +1405,21 @@ impl ExternalAgentServer for LocalRegistryNpxAgent {
 
             let (package_name, package_spec) = bounded_npm_package_spec(&package);
             let node_modules_dir = install_dir.join("node_modules");
-            install_npx_package(&node_runtime, &install_dir, &package_spec).await?;
+            // Installing again would have npm check its registry on every start,
+            // so an installed agent is used as it is without background updates.
+            let installed =
+                node_runtime::read_package_executable(node_modules_dir.clone(), package_name)
+                    .await
+                    .is_ok();
+            if !installed {
+                let subject = format!("the {package_name} npm package for the {registry_id} agent");
+                if !http_client::network_guard::ask_to_download(subject).await {
+                    anyhow::bail!("{registry_id} isn't installed, and downloading it was declined");
+                }
+            }
+            if allows_automatic_updates || !installed {
+                install_npx_package(&node_runtime, &install_dir, &package_spec).await?;
+            }
             if let Some(incomplete_package_dir) =
                 find_incomplete_npm_package(fs.as_ref(), &node_modules_dir).await?
             {

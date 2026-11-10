@@ -50,7 +50,7 @@ use crate::{
         ManifestTree,
     },
     prettier_store::{self, PrettierStore, PrettierStoreEvent},
-    project_settings::{BinarySettings, LspSettings, ProjectSettings},
+    project_settings::{BinarySettings, LspSettings, NetworkSettings, ProjectSettings},
     toolchain_store::{LocalToolchainStore, ToolchainStoreEvent},
     trusted_worktrees::{PathTrust, TrustedWorktrees, TrustedWorktreesEvent},
     worktree_store::{WorktreeStore, WorktreeStoreEvent},
@@ -878,6 +878,8 @@ impl LocalLspStore {
             )));
         }
 
+        let offline = NetworkSettings::is_offline(cx);
+        let allows_automatic_updates = NetworkSettings::allows_automatic_updates(cx);
         let lsp_binary_options = LanguageServerBinaryOptions {
             allow_path_lookup: !settings
                 .binary
@@ -923,7 +925,27 @@ impl LocalLspStore {
 
             let mut binary = match (existing_binary, maybe_download_binary) {
                 (binary, None) => binary?,
-                (Err(_), Some(downloader)) => downloader.await?,
+                // Offline, a missing server can't be downloaded; not even
+                // trying keeps npm and the like from reaching out on their own.
+                (Err(_), Some(_)) if offline => {
+                    return Err(anyhow!(
+                        "{} is not installed, and Zed is offline, so it can't download it",
+                        adapter.name()
+                    ));
+                }
+                (Err(_), Some(downloader)) => {
+                    let subject = format!("the {} language server", adapter.name());
+                    if !http_client::network_guard::ask_to_download(subject).await {
+                        return Err(anyhow!(
+                            "{} is not installed, and downloading it was declined",
+                            adapter.name()
+                        ));
+                    }
+                    downloader.await?
+                }
+                // An installed server is used as it is, unless Zed may check
+                // for new versions in the background.
+                (Ok(existing_binary), Some(_)) if !allows_automatic_updates => existing_binary,
                 (Ok(existing_binary), Some(downloader)) => {
                     let mut download_timeout = cx
                         .background_executor()

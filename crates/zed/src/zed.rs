@@ -5,6 +5,7 @@ pub(crate) mod mac_only_instance;
 mod migrate;
 #[cfg(target_os = "macos")]
 pub(crate) mod move_to_applications;
+pub mod network;
 mod open_listener;
 mod open_url_modal;
 mod quick_action_bar;
@@ -630,6 +631,10 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
         let line_ending_indicator =
             cx.new(|_| line_ending_selector::LineEndingIndicator::default());
         let git_blame_status = cx.new(|_| git_ui::GitBlameStatus::default());
+        let offline_indicator = {
+            let fs = workspace.app_state().fs.clone();
+            cx.new(|cx| network::OfflineIndicator::new(fs, cx))
+        };
         let git_remote_button = cx.new(|cx| git_ui::GitRemoteButton::new(workspace, cx));
         let merge_conflict_indicator =
             cx.new(|cx| git_ui::MergeConflictIndicator::new(workspace, cx));
@@ -639,6 +644,7 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
             // workspace puts there while the activity bar is turned off.
             status_bar.add_left_item(project_status_item, window, cx);
             status_bar.add_left_item(git_remote_button, window, cx);
+            status_bar.add_right_item(offline_indicator, window, cx);
             status_bar.add_right_item(edit_prediction_ui, window, cx);
             status_bar.add_right_item(active_buffer_encoding, window, cx);
             status_bar.add_right_item(active_buffer_language, window, cx);

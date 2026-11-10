@@ -5,7 +5,7 @@ use dap::adapters::DebugAdapterName;
 use fs::Fs;
 use futures::StreamExt as _;
 use git::repository::DEFAULT_WORKTREE_DIRECTORY;
-use gpui::{AsyncApp, BorrowAppContext, Context, Entity, EventEmitter, Subscription, Task};
+use gpui::{App, AsyncApp, BorrowAppContext, Context, Entity, EventEmitter, Subscription, Task};
 use lsp::{DEFAULT_LSP_REQUEST_TIMEOUT_SECS, LanguageServerName};
 use paths::{
     EDITORCONFIG_NAME, debug_task_file_name, local_debug_file_relative_path,
@@ -114,6 +114,48 @@ impl From<settings::NodeBinarySettings> for NodeBinarySettings {
             path: settings.path,
             npm_path: settings.npm_path,
             ignore_system_version: settings.ignore_system_version.unwrap_or(false),
+        }
+    }
+}
+
+/// When Zed may use the network.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, RegisterSetting)]
+pub struct NetworkSettings {
+    /// The `network.offline` setting. Also see
+    /// [`http_client::network_guard::is_offline`], which covers `--offline`.
+    pub offline: bool,
+    pub ask_before_downloading: bool,
+    pub automatic_updates: bool,
+}
+
+impl NetworkSettings {
+    pub fn is_offline(cx: &App) -> bool {
+        http_client::network_guard::is_offline() || Self::get_global(cx).offline
+    }
+
+    /// Whether Zed may check for and download new versions of what is already
+    /// installed, without being asked.
+    pub fn allows_automatic_updates(cx: &App) -> bool {
+        !Self::is_offline(cx) && Self::get_global(cx).automatic_updates
+    }
+
+    /// Hands the settings to the network guard, for code that checks them
+    /// without access to settings.
+    pub fn sync_network_guard(cx: &App) {
+        let settings = Self::get_global(cx);
+        http_client::network_guard::set_offline_setting(settings.offline);
+        http_client::network_guard::set_automatic_updates(settings.automatic_updates);
+        http_client::network_guard::set_ask_before_downloading(settings.ask_before_downloading);
+    }
+}
+
+impl Settings for NetworkSettings {
+    fn from_settings(content: &settings::SettingsContent) -> Self {
+        let network = content.network.clone().unwrap_or_default();
+        Self {
+            offline: network.offline.unwrap_or(false),
+            ask_before_downloading: network.ask_before_downloading.unwrap_or(true),
+            automatic_updates: network.automatic_updates.unwrap_or(false),
         }
     }
 }

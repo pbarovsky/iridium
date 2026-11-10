@@ -2360,6 +2360,22 @@
   // language servers and Copilot.
   //
   // Note: changing this setting currently requires restarting Zed.
+  // When Zed may use the network. Every request Zed makes is logged with the
+  // `network` target in Zed's log.
+  "network": {
+    // Keep Zed off the network entirely. What is already installed keeps
+    // working; nothing is downloaded or checked. `--offline` and the
+    // `ZED_OFFLINE` environment variable do the same for one session.
+    "offline": false,
+    // Ask before downloading something for the first time, like a language
+    // server for a language just opened, Node.js, or an agent's package.
+    "ask_before_downloading": true,
+    // Let Zed check for and download new versions of language servers,
+    // Node.js packages, agents and extensions in the background. When off,
+    // what is installed is used as it is, and Zed only downloads what is
+    // missing.
+    "automatic_updates": false,
+  },
   "node": {
     // By default, Zed will look for `node` and `npm` on your `$PATH`, and use the
     // existing executables if their version is recent enough. Set this to `true`

@@ -216,6 +216,7 @@ impl VsCodeSettings {
             line_indicator_format: None,
             log: None,
             node: self.node_binary_settings(),
+            network: None,
 
             outline_panel: self.outline_panel_settings_content(),
             search_panel: None,

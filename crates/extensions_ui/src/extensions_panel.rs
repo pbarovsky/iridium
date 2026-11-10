@@ -59,7 +59,10 @@ impl ExtensionsPanel {
     ) -> Result<Entity<Self>> {
         workspace.update_in(&mut cx, |workspace, window, cx| {
             let page = ExtensionsPage::new(workspace, None, None, window, cx);
-            page.update(cx, |page, cx| page.set_compact(true, cx));
+            page.update(cx, |page, cx| {
+                page.set_compact(true, cx);
+                page.defer_catalog_fetch();
+            });
             cx.new(|_| Self {
                 page,
                 position: DockPosition::Left,
@@ -128,5 +131,12 @@ impl Panel for ExtensionsPanel {
 
     fn activation_priority(&self) -> u32 {
         8
+    }
+
+    fn set_active(&mut self, active: bool, _window: &mut Window, cx: &mut Context<Self>) {
+        if active {
+            self.page
+                .update(cx, |page, cx| page.fetch_deferred_catalog(cx));
+        }
     }
 }

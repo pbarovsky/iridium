@@ -10,7 +10,7 @@ description = "A HTTP client library for Zed and GPUI"
 workspace = true
 
 [features]
-test-support = ["dep:log"]
+test-support = []
 
 [lib]
 path = "src/http_client.rs"
@@ -23,7 +23,7 @@ bytes.workspace = true
 futures.workspace = true
 http-body.workspace = true
 http.workspace = true
-log = { workspace = true, optional = true }
+log.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
 serde_json.workspace = true

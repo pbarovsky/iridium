@@ -285,6 +285,14 @@ pub async fn download_adapter_from_github(
     if version_path.exists() {
         return Ok(version_path);
     }
+    let subject = format!(
+        "the {adapter_name} debug adapter ({}) from GitHub",
+        github_version.tag_name
+    );
+    anyhow::ensure!(
+        http_client::network_guard::ask_to_download(subject).await,
+        "downloading the {adapter_name} debug adapter was declined"
+    );
 
     if !adapter_path.exists() {
         fs.create_dir(adapter_path.as_path())

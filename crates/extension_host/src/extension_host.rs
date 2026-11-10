@@ -40,7 +40,7 @@ use language::{
     QueryFileContents, QueryFiles, Rope,
 };
 use node_runtime::NodeRuntime;
-use project::{ContextProviderWithTasks, Project};
+use project::{ContextProviderWithTasks, Project, project_settings::NetworkSettings};
 use release_channel::ReleaseChannel;
 use remote::{ConnectionState, RemoteClient, RemoteClientEvent};
 use semver::Version;
@@ -463,9 +463,15 @@ impl ExtensionStore {
 
         cx.spawn(async move |this, cx| {
             initial_index_load.await;
-            this.update(cx, |this, cx| this.auto_install_extensions(cx))
-                .ok();
-            this.update(cx, |this, cx| this.check_for_updates(cx)).ok();
+            // Installing default extensions and updating installed ones are
+            // background updates, which Zed only does when allowed to.
+            this.update(cx, |this, cx| {
+                if NetworkSettings::allows_automatic_updates(cx) {
+                    this.auto_install_extensions(cx);
+                    this.check_for_updates(cx);
+                }
+            })
+            .ok();
         })
         .detach();
 

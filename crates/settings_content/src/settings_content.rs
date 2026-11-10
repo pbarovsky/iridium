@@ -287,6 +287,9 @@ pub struct SettingsContent {
     /// Configuration for Node-related features
     pub node: Option<NodeBinarySettings>,
 
+    /// When Zed may use the network.
+    pub network: Option<NetworkSettingsContent>,
+
     pub proxy: Option<String>,
 
     /// Whether to reduce non-essential motion in the UI, such as loading
@@ -417,7 +420,7 @@ fallible_options::flattened_deserialize!(SettingsContent {
         git,
         global_lsp_settings, image_viewer, markdown_preview, repl, helix_mode, hide_mouse,
         journal, log, line_indicator_format, language_models, copilot, outline_panel, search_panel, extensions_panel, project_panel,
-        node, proxy, reduce_motion, server_url, credentials_url, session, telemetry, terminal,
+        node, network, proxy, reduce_motion, server_url, credentials_url, session, telemetry, terminal,
         title_bar, vim_mode, calls, which_key, vim, modeline_lines, feature_flags,
         instrumentation,
     },
@@ -1721,4 +1724,29 @@ impl std::str::FromStr for DelayMs {
             .map(DelayMs)
             .with_context(|| format!("failed to parse delay duration: {s}"))
     }
+}
+
+/// When Zed may use the network.
+#[with_fallible_options]
+#[derive(Clone, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug, PartialEq, Eq)]
+pub struct NetworkSettingsContent {
+    /// Keep Zed off the network entirely. Language servers, Node.js and
+    /// extensions that are already installed keep working; nothing is
+    /// downloaded or checked. The `--offline` flag and the `ZED_OFFLINE`
+    /// environment variable do the same for one session.
+    ///
+    /// Default: false
+    pub offline: Option<bool>,
+    /// Ask before downloading something for the first time, like a language
+    /// server for a language just opened, Node.js, or an agent's package.
+    ///
+    /// Default: true
+    pub ask_before_downloading: Option<bool>,
+    /// Let Zed check for and download new versions of language servers,
+    /// Node.js packages, agents and extensions in the background, e.g. every
+    /// time a language server starts. When off, what is installed is used as
+    /// it is, and Zed only downloads something that is missing.
+    ///
+    /// Default: false
+    pub automatic_updates: Option<bool>,
 }

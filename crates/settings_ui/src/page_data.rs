@@ -9208,6 +9208,72 @@ fn ai_page(cx: &App) -> SettingsPage {
 }
 
 fn network_page() -> SettingsPage {
+    fn internet_access_section() -> [SettingsPageItem; 4] {
+        [
+            SettingsPageItem::SectionHeader("Internet Access"),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Offline Mode",
+                description: "Keep Zed off the internet entirely. What is already installed keeps working, and local servers like Ollama stay reachable. The status bar shows when Zed is offline.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("network.offline"),
+                    pick: |settings_content| settings_content.network.as_ref()?.offline.as_ref(),
+                    write: |settings_content, value, _| {
+                        settings_content.network.get_or_insert_default().offline = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Ask Before Downloading",
+                description: "Ask before downloading something for the first time, like a language server for a language just opened, Node.js, or an agent's package.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("network.ask_before_downloading"),
+                    pick: |settings_content| {
+                        settings_content
+                            .network
+                            .as_ref()?
+                            .ask_before_downloading
+                            .as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .network
+                            .get_or_insert_default()
+                            .ask_before_downloading = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Automatic Updates",
+                description: "Check for and download new versions of language servers, agents and extensions in the background. When off, what is installed is used as it is, and extensions are updated from the extensions panel.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("network.automatic_updates"),
+                    pick: |settings_content| {
+                        settings_content
+                            .network
+                            .as_ref()?
+                            .automatic_updates
+                            .as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .network
+                            .get_or_insert_default()
+                            .automatic_updates = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+        ]
+    }
+
     fn network_section() -> [SettingsPageItem; 3] {
         [
             SettingsPageItem::SectionHeader("Network"),
@@ -9250,7 +9316,7 @@ fn network_page() -> SettingsPage {
 
     SettingsPage {
         title: "Network",
-        items: concat_sections![network_section()],
+        items: concat_sections![internet_access_section(), network_section()],
     }
 }
 

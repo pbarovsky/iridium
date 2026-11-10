@@ -430,6 +430,9 @@ pub struct ExtensionsPage {
     upsells: BTreeSet<Feature>,
     /// Whether the page is shown in the narrow extensions panel rather than a tab.
     compact: bool,
+    /// The catalog is only fetched once the page is shown, see
+    /// [`Self::defer_catalog_fetch`].
+    catalog_fetch_deferred: bool,
 }
 
 impl ExtensionsPage {
@@ -495,6 +498,7 @@ impl ExtensionsPage {
                 query_editor,
                 upsells: BTreeSet::default(),
                 compact: false,
+                catalog_fetch_deferred: false,
             };
             this.update_local_search_results(cx);
             this.fetch_extensions(FetchDebounce::Immediate, None, cx);
@@ -823,6 +827,12 @@ impl ExtensionsPage {
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<ContextMenu> {
+        let is_installed = matches!(
+            ExtensionStore::global(cx)
+                .read(cx)
+                .extension_status(&extension_id),
+            extension_host::ExtensionStatus::Installed(_)
+        );
         ContextMenu::build(window, cx, |context_menu, window, _| {
             context_menu
                 .entry(
@@ -843,6 +853,18 @@ impl ExtensionsPage {
                 })
                 .entry("Copy Author Info", None, move |_, cx| {
                     cx.write_to_clipboard(ClipboardItem::new_string(authors.to_string()));
+                })
+                .when(is_installed, |menu| {
+                    menu.separator().entry("Uninstall", None, {
+                        let extension_id = extension_id.clone();
+                        move |_, cx| {
+                            ExtensionStore::global(cx).update(cx, |store, cx| {
+                                store
+                                    .uninstall_extension(extension_id.clone(), cx)
+                                    .detach_and_log_err(cx);
+                            });
+                        }
+                    })
                 })
         })
     }
@@ -994,6 +1016,21 @@ impl ExtensionsPage {
     pub fn set_compact(&mut self, compact: bool, cx: &mut Context<Self>) {
         self.compact = compact;
         cx.notify();
+    }
+
+    /// Holds off fetching the extension catalog from zed.dev until
+    /// [`Self::fetch_deferred_catalog`], so a page that exists without being
+    /// shown, like the one in the extensions panel, doesn't go online.
+    pub fn defer_catalog_fetch(&mut self) {
+        // Dropping the task cancels the fetch `new` started, before it runs.
+        self.extension_fetch_task = None;
+        self.catalog_fetch_deferred = true;
+    }
+
+    pub fn fetch_deferred_catalog(&mut self, cx: &mut Context<Self>) {
+        if std::mem::take(&mut self.catalog_fetch_deferred) {
+            self.fetch_extensions(FetchDebounce::Immediate, None, cx);
+        }
     }
 
     pub fn focus_extension(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {

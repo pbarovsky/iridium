@@ -1,3 +1,13 @@
+# Iridium fork
+
+This repository is Iridium, a fork of Zed. Before working on it, read `IRIDIUM.md`:
+it lists everything that differs from Zed and how the fork is built.
+
+* HARD RULE: Every feature or behavior change made in this fork is recorded in `IRIDIUM.md`
+  in the same change (what it does, its settings, its files). Keep the file current: update
+  or remove entries when a feature changes or is removed.
+* Keep changes to Zed's own files small; put new code in new files, so merging newer Zed stays easy.
+
 # Rust coding guidelines
 
 * Prioritize code correctness and clarity. Speed and efficiency are secondary priorities unless otherwise specified.

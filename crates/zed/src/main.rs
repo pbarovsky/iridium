@@ -45,7 +45,10 @@ use reqwest_client::ReqwestClient;
 use assets::Assets;
 use node_runtime::{NodeBinaryOptions, NodeRuntime};
 use parking_lot::Mutex;
-use project::{project_settings::ProjectSettings, trusted_worktrees};
+use project::{
+    project_settings::{NetworkSettings, ProjectSettings},
+    trusted_worktrees,
+};
 use recent_projects::{RemoteSettings, open_remote_project};
 use release_channel::{AppCommitSha, AppVersion, ReleaseChannel};
 use session::{AppSession, Session};
@@ -208,6 +211,11 @@ fn main() {
     util::prevent_root_execution();
 
     let args = Args::parse();
+    if args.offline
+        || std::env::var_os("ZED_OFFLINE").is_some_and(|value| !value.is_empty() && value != "0")
+    {
+        http_client::network_guard::force_offline();
+    }
 
     // `zed --askpass` Makes zed operate in nc/netcat mode for use with askpass
     #[cfg(not(target_os = "windows"))]
@@ -509,7 +517,13 @@ fn main() {
             ReqwestClient::proxy_and_user_agent(proxy_url, &user_agent)
                 .expect("could not start HTTP client")
         };
-        cx.set_http_client(Arc::new(http));
+        // Every request goes through the guard, which logs it and refuses it
+        // while offline.
+        cx.set_http_client(Arc::new(
+            http_client::network_guard::NetworkGuardClient::new(Arc::new(http)),
+        ));
+        NetworkSettings::sync_network_guard(cx);
+        zed::network::init(cx);
 
         <dyn Fs>::set_global(fs.clone(), cx);
 
@@ -528,11 +542,12 @@ fn main() {
         let languages = Arc::new(languages);
         let (mut tx, rx) = watch::channel(None);
         cx.observe_global::<SettingsStore>(move |cx| {
+            NetworkSettings::sync_network_guard(cx);
             let settings = &ProjectSettings::get_global(cx).node;
             let options = NodeBinaryOptions {
                 allow_path_lookup: !settings.ignore_system_version,
-                // TODO: Expose this setting
-                allow_binary_download: true,
+                // A missing Node.js is downloaded unless Zed is offline.
+                allow_binary_download: !NetworkSettings::is_offline(cx),
                 use_paths: settings.path.as_ref().map(|node_path| {
                     let node_path = PathBuf::from(shellexpand::tilde(node_path).as_ref());
                     let npm_path = settings
@@ -1671,6 +1686,11 @@ struct Args {
     /// clipboard`
     #[arg(long)]
     system_specs: bool,
+
+    /// Keep Zed off the network for this session: nothing is downloaded or
+    /// checked, and every request is refused. The same as `ZED_OFFLINE=1`.
+    #[arg(long)]
+    offline: bool,
 
     /// Used for recording minidumps on crashes by having Zed run a separate
     /// process communicating over a socket.
