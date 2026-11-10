@@ -211,7 +211,16 @@ impl Render for TitleBar {
                 .h_full()
                 .gap_0p5()
                 .when_some(self.application_menu.clone(), |title_bar, menu| {
-                    title_bar.child(menu)
+                    // The app's logo leads the menus, as in VS Code.
+                    title_bar
+                        .child(
+                            div().pl_1p5().pr_1().child(
+                                Icon::new(IconName::IridiumLogo)
+                                    .size(IconSize::Medium)
+                                    .color(Color::Muted),
+                            ),
+                        )
+                        .child(menu)
                 })
                 .children(self.render_restricted_mode(cx))
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())

@@ -188,6 +188,7 @@ pub enum IconName {
     Inception,
     Indicator,
     Info,
+    IridiumLogo,
     Json,
     Keyboard,
     LayoutPanel,
