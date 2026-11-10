@@ -1,7 +1,7 @@
 # Iridium — чем этот форк отличается от Zed
 
 Iridium — форк редактора [Zed](https://github.com/zed-industries/zed) (репозиторий
-`github.com/pbarovsky/zed`, основная ветка `iridium`). Цель — редактор с низким
+`github.com/pbarovsky/iridium`, основная ветка `iridium`). Цель — редактор с низким
 потреблением ресурсов Zed и привычным интерфейсом VS Code, без аккаунтов, телеметрии
 и фоновой сетевой активности.
 
@@ -40,6 +40,17 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   логотипом) → `app-icon*.png` (512 и 1024, одинаковые для всех каналов) и
   `windows/app-icon*.ico`. Перерисовать PNG: `ksvgtopng 512 512 <svg> <png>`.
 - `.desktop`-шаблон: описание и ключевые слова.
+- Иконка документов macOS: `crates/zed/resources/document-icon.svg` → `Document.icns`.
+- Логотип Zed заменён логотипом Iridium во всех картинках (имена файлов прежние,
+  чтобы не трогать код): `assets/images/zed_logo.svg` (экран приветствия, онбординг),
+  `zed_x_copilot.svg` (вход в Copilot), штампы тарифов `*_stamp.svg` (контуром, как
+  было), иконки `zed_agent.svg`, `zed_predict*.svg`, `ai_zed.svg` (логотип вписан в
+  место буквы Z). Логотип одноцветный, тень — `fill-opacity="0.45"`; координаты
+  пересчитываются в нужную область, а не масштабируются `transform`, чтобы не менялась
+  толщина обводок. При слиянии с Zed для этих файлов оставлять версию форка.
+- Заголовки «Welcome to Iridium» / «Welcome back to Iridium» (`welcome.rs`,
+  `onboarding.rs`); логотип рядом с ними — цвета фона редактора, чуть темнее (на почти чёрном фоне —
+  светлее), как «тиснение» на приветствии VS Code (`welcome::logo_watermark_color`).
 - Каталоги настроек и данных — см. «Заметки для разработки» (`paths::APP_NAME`).
 
 Осталось:
@@ -47,8 +58,24 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   (`script/bundle-*`, `install-linux`), имя `.desktop`-файла, flatpak-манифест
   (CLI проверяет `FLATPAK_ID` на `dev.zed.Zed`).
 - Схема ссылок `zed://`, папка проекта `.zed/` (вместе с совместимостью — решить).
+- В штампах тарифов справа точками написано «ZED» (штампы видны только с аккаунтом
+  zed.dev, которого в форке нет); подзаголовок онбординга «The editor for what's next»
+  — слоган Zed.
 - Тексты интерфейса с «Zed» (пункты меню Help: «Zed Repository» и т. п., онбординг,
   описания настроек, сообщения об ошибках), документация.
+
+## Темы
+
+- Встроены **Iridium Dark** (`assets/themes/iridium/iridium.json`, семейство «Iridium»)
+  — тёмная по умолчанию, и **One Dark / One Light** из Zed; One Light — светлая по
+  умолчанию, пока нет Iridium Light. Iridium Dark основана на теме VS Code 2026
+  (Eugene Bokhan), см. `assets/themes/LICENSES`.
+- Темы Ayu и Gruvbox удалены. `DEFAULT_DARK_THEME` (`settings_content/src/theme.rs`,
+  `theme/src/theme.rs`) = «Iridium Dark», поэтому встроенная в код запасная тема тоже
+  называется так и перекрывается темой из файла. `DEFAULT_LIGHT_THEME` = «One Light».
+- Онбординг предлагает две темы: Iridium и One (`onboarding/src/basics_page.rs`).
+- При слиянии с Zed: темы Ayu/Gruvbox не возвращать; проверять код, который ищет темы
+  по имени (`registry.get("…").unwrap()`).
 
 ## Интерфейс
 

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B404A"/>
+      <stop offset="1" stop-color="#1F2228"/>
+    </linearGradient>
+  </defs>
+  <path d="M232 92 H640 L832 284 V900 Q832 932 800 932 H232 Q200 932 200 900 V124 Q200 92 232 92Z" fill="url(#page)"/>
+  <path d="M232 92 H640 L832 284 V900 Q832 932 800 932 H232 Q200 932 200 900 V124 Q200 92 232 92Z" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="3"/>
+  <path d="M640 92 V252 Q640 284 672 284 H832Z" fill="#5A606C"/>
+  <path fill="#7C828E" fill-rule="evenodd" d="M393.164,719.459 L574.527,747.614 L667.368,605.2 L693.277,635.427 L591.714,780 L393.164,756.164Z"/>
+  <path fill="#F2F3F5" fill-rule="evenodd" d="M330.723,542.414 L393.164,719.459 L574.527,747.614 L667.368,605.2 L604.927,428.155 L423.65,400ZM436.518,429.018 L519.255,441.886 L505.005,534.641 L400.677,559.6 L505.005,584.473 L529.964,678.091 L554.836,584.473 L627.209,571.518 L637.832,601.659 L561.573,718.595 L413.027,695.536 L360.259,545.955Z"/>
+</svg>

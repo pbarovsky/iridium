@@ -322,7 +322,7 @@ impl Component for ThemePreviewTile {
     fn preview(_window: &mut Window, cx: &mut App) -> AnyElement {
         let theme_registry = ThemeRegistry::global(cx);
 
-        let one_dark = theme_registry.get("One Dark");
+        let one_dark = theme_registry.get(theme::DEFAULT_DARK_THEME);
         let one_light = theme_registry.get("One Light");
         let gruvbox_dark = theme_registry.get("Gruvbox Dark");
         let gruvbox_light = theme_registry.get("Gruvbox Light");

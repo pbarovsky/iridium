@@ -451,9 +451,9 @@ impl Render for WelcomePage {
         };
 
         let welcome_label = if self.fallback_to_recent_projects {
-            "Welcome back to Zed"
+            "Welcome back to Iridium"
         } else {
-            "Welcome to Zed"
+            "Welcome to Iridium"
         };
 
         h_flex()
@@ -480,7 +480,10 @@ impl Render for WelcomePage {
                             .justify_center()
                             .mb_4()
                             .gap_4()
-                            .child(Vector::square(VectorName::ZedLogo, rems_from_px(45_f32)))
+                            .child(
+                                Vector::square(VectorName::ZedLogo, rems_from_px(45_f32))
+                                    .color(logo_watermark_color(cx)),
+                            )
                             .child(
                                 v_flex().child(Headline::new(welcome_label)).child(
                                     Label::new("The editor for what's next")
@@ -698,4 +701,20 @@ mod tests {
         let paths = PathList::new(&["/"]);
         assert_eq!(project_name(&paths), "Untitled");
     }
+}
+
+/// The welcome logo's color: the editor background, a little darker (or
+/// lighter, on a nearly black background), so the logo is pressed into the
+/// page like VS Code's watermark instead of standing out.
+pub fn logo_watermark_color(cx: &App) -> Color {
+    let background = cx.theme().colors().editor_background;
+    let lightness = if background.l > 0.12 {
+        background.l - 0.06
+    } else {
+        background.l + 0.05
+    };
+    Color::Custom(gpui::Hsla {
+        l: lightness,
+        ..background
+    })
 }

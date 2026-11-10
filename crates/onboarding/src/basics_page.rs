@@ -22,12 +22,13 @@ use crate::{
     theme_preview::{ThemePreviewStyle, ThemePreviewTile},
 };
 
-const LIGHT_THEMES: [&str; 3] = ["One Light", "Ayu Light", "Gruvbox Light"];
-const DARK_THEMES: [&str; 3] = ["One Dark", "Ayu Dark", "Gruvbox Dark"];
-const FAMILY_NAMES: [SharedString; 3] = [
+// Iridium bundles its own dark theme and Zed's One themes. Iridium has no light
+// variant yet, so its tile shows Iridium Dark in light mode too.
+const LIGHT_THEMES: [&str; 2] = [settings::DEFAULT_DARK_THEME, settings::DEFAULT_LIGHT_THEME];
+const DARK_THEMES: [&str; 2] = [settings::DEFAULT_DARK_THEME, "One Dark"];
+const FAMILY_NAMES: [SharedString; 2] = [
+    SharedString::new_static("Iridium"),
     SharedString::new_static("One"),
-    SharedString::new_static("Ayu"),
-    SharedString::new_static("Gruvbox"),
 ];
 
 fn get_theme_family_themes(theme_name: &str) -> Option<(&'static str, &'static str)> {
@@ -99,7 +100,7 @@ fn render_theme_section(tab_index: &mut isize, cx: &mut App) -> impl IntoElement
         tab_index: &mut isize,
         theme_selection: &ThemeSelection,
         cx: &mut App,
-    ) -> [impl IntoElement; 3] {
+    ) -> [impl IntoElement; 2] {
         let system_appearance = SystemAppearance::global(cx);
         let theme_registry = ThemeRegistry::global(cx);
 
@@ -124,7 +125,7 @@ fn render_theme_section(tab_index: &mut isize, cx: &mut App) -> impl IntoElement
 
         let themes = theme_names.map(|theme| theme_registry.get(theme).unwrap());
 
-        [0, 1, 2].map(|index| {
+        [0, 1].map(|index| {
             let theme = &themes[index];
             let is_selected = theme.name == current_theme_name;
             let name = theme.name.clone();
