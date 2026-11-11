@@ -167,6 +167,10 @@ impl Render for NotificationCenter {
             .child(
                 v_flex()
                     .id("notification-center-list")
+                    // Lets the list shrink to the panel's height and scroll
+                    // instead of growing past it.
+                    .flex_1()
+                    .min_h_0()
                     .overflow_y_scroll()
                     .when(is_empty, |list| {
                         list.child(

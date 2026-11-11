@@ -126,6 +126,10 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   уведомления) открывает панель вверх: в ней сами уведомления с их кнопками, крестик
   удаляет уведомление из центра, кнопка «Clear All» — все и закрывает панель.
   Панель закрывается кликом вне неё, Escape или по колокольчику.
+- Панель центра — до 70% высоты окна, дальше список прокручивается.
+- Видов уведомлений в рабочей области три: `MessageNotification`,
+  `LanguageServerPrompt` (обе рисуются в центре плоско и помечают ответ кнопкой) и
+  `AnnouncementToastNotification` (анонс Zed после автообновления, см. планы).
 - В центре уведомления рисуются плоскими строками без тени и рамки, разделёнными
   тонкой линией (`is_in_notification_center` в `notifications.rs`; так сделано для
   `MessageNotification` и вопросов языковых серверов).
@@ -151,6 +155,19 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   панели в activity bar. Настройка `extensions_panel.show_count_badge` (по умолчанию
   `true`, Settings → Panels → Extensions Update Badge).
 
+## Markdown
+
+- `.md` открываются сразу в предпросмотре (`markdown_preview.open_markdown_files_in_preview`
+  по умолчанию `true`).
+- Кнопки в панели инструментов (`crates/zed/src/zed/markdown_toolbar.rs`): в
+  предпросмотре — «Edit» (исходник на месте предпросмотра) и «Edit Side by Side»
+  (исходник на месте, предпросмотр в соседней панели, обновляется при вводе); в
+  исходнике — «Open Preview to the Side».
+- Двойной клик в предпросмотре — редактирование в этом месте: фокус в исходник, если он
+  открыт рядом, иначе исходник заменяет предпросмотр (`edit_source_at_click` в
+  `markdown_preview_view.rs`). Одиночный клик, как в Zed, ставит туда курсор.
+- Ctrl+Shift+V из Zed (`markdown::CloseAndReturnToEditor`) тоже возвращает к исходнику.
+
 ## Git
 
 ### Git-панель в стиле VS Code
@@ -159,6 +176,11 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
 - Сверху поле коммита и кнопка Commit на всю ширину (split-кнопка с меню
   Amend / Signoff / Skip Hooks), под ними View Diff / Stage All / view options и
   список изменений.
+- Когда коммитить нечего, а ветка расходится с remote, кнопка Commit становится
+  кнопкой синхронизации, как в VS Code: «Publish Branch» (нет upstream или он удалён),
+  «Sync Changes N↑» (push), «Sync Changes M↓ N↑» (pull, затем push, если pull прошёл).
+  Во время операции — «Syncing…». `sync_action` / `render_vscode_sync_button` в
+  `vscode_layout.rs`.
 - Внизу сворачиваемые секции с изменяемой высотой (тянуть за верхнюю границу):
   **Last Commit** (с Uncommit), **Graph** (встроенный граф текущей ветки, кнопка
   открыть полный граф), **History** (подгрузка по 100 коммитов при прокрутке),
@@ -223,17 +245,13 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
 
 ## Планы и что проверить
 
-- **Центр уведомлений: карточки других видов.** Плоский вид в центре есть только у
-  `MessageNotification` и вопросов языковых серверов (`LanguageServerPrompt`).
-  Остальные виды уведомлений (например, от агента, об обновлении, ошибки с особым
-  интерфейсом) рисуют себя сами с `elevation_3` и в центре будут выглядеть объёмными
-  карточками. Проверить, какие ещё уведомления реально попадают в центр, и для них
-  тоже учитывать `is_in_notification_center` (или вынести общий вид рамки).
-- **Центр уведомлений: ответ кнопкой у других видов.** Только кнопки
-  `MessageNotification` и действия `LanguageServerPrompt` вызывают
-  `mark_notification_answered`. У других видов уведомлений нажатие кнопки действия
-  может положить уведомление в центр, будто его закрыли крестиком. Проверить и
-  отметить такие кнопки.
+- **Автообновление Zed в релизных сборках (важно).** `"auto_update": true`, а канал
+  Stable (и Preview/Nightly) проверяет обновления на zed.dev
+  (`ReleaseChannel::poll_for_updates`, крейт `auto_update`) — релизная сборка Iridium
+  скачала бы и установила обычный Zed. В dev-сборке не проявляется (Dev не проверяет).
+  Отключить, пока у Iridium нет своего сервера обновлений. Заодно не появится карточка
+  анонса Zed (`AnnouncementToastNotification` про Delta), которая показывается только
+  после такого обновления.
 
 - **Настройки вида коммита из Zed не действуют на просмотр коммита форка.**
   В Zed 1.29 появились `git.commit_view.expand_description` (раскрывать ли описание
@@ -242,15 +260,6 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   форк открывает свой `CommitFilesView`, где описание сейчас всегда раскрыто
   (`message_collapsed: false`), а файл показывается один. Решить: подключить
   `expand_description` к нашему виду, а `expand_files` скрыть (или оставить как есть).
-
-- **Git-панель: нельзя отправить коммиты из панели.** После того как всё закоммичено,
-  в VS Code-раскладке (`git_panel/vscode_layout.rs`, `render_vscode_commit_button`)
-  нет способа сделать push — только через кнопку fetch/push/pull в статус-баре.
-  Сделать как в VS Code: когда изменений для коммита нет, а есть неотправленные
-  коммиты, кнопка Commit превращается в «Sync Changes» / «Push» с числом коммитов
-  (`↑N`, а при входящих — `↓M ↑N`); если ветка не опубликована — «Publish Branch».
-  Данные о расхождении с remote уже есть (`status.ahead` / `status.behind`, их
-  показывает секция Repositories).
 
 ## Заметки для разработки
 

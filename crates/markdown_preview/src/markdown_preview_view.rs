@@ -1015,6 +1015,34 @@ impl MarkdownPreviewView {
         cx.notify();
     }
 
+    /// The editor whose Markdown this preview shows.
+    pub fn source_editor(&self) -> Option<Entity<Editor>> {
+        self.active_editor
+            .as_ref()
+            .map(|state| state.editor.clone())
+    }
+
+    /// Edits the source where it was double-clicked, like VS Code's preview:
+    /// focuses the editor if it's shown next to the preview, or else replaces
+    /// the preview with it.
+    fn edit_source_at_click(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(editor) = self.source_editor() else {
+            return;
+        };
+        let editor_shown = self.workspace.upgrade().is_some_and(|workspace| {
+            workspace.read(cx).pane_for(&editor).is_some_and(|pane| {
+                pane.read(cx)
+                    .active_item()
+                    .is_some_and(|item| item.item_id() == editor.entity_id())
+            })
+        });
+        if editor_shown {
+            editor.focus_handle(cx).focus(window, cx);
+        } else {
+            self.close_and_return_to_editor(&CloseAndReturnToEditor, window, cx);
+        }
+    }
+
     fn close_and_return_to_editor(
         &mut self,
         _: &CloseAndReturnToEditor,
@@ -1171,6 +1199,7 @@ impl MarkdownPreviewView {
         if let Some(active_editor) = active_editor {
             let editor_for_checkbox = active_editor.clone();
             let view_handle = cx.entity().downgrade();
+            let preview_for_click = view_handle.clone();
             markdown_element = markdown_element
                 .on_source_click(move |source_index, click_count, window, cx| {
                     if click_count == 1 {
@@ -1181,6 +1210,10 @@ impl MarkdownPreviewView {
                             window,
                             cx,
                         );
+                    } else if click_count == 2 {
+                        preview_for_click
+                            .update(cx, |preview, cx| preview.edit_source_at_click(window, cx))
+                            .ok();
                     }
                     false
                 })

@@ -17,6 +17,7 @@ use super::*;
 use crate::git_graph::GitGraph;
 use gpui::{Bounds, DragMoveEvent, EntityId, FontWeight};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 /// How many commits of the log the history section takes at a time.
 const HISTORY_PAGE_SIZE: usize = 100;
@@ -539,9 +540,135 @@ impl GitPanel {
         )
     }
 
+    /// What the commit button does instead of committing when there is nothing
+    /// to commit, like VS Code's "Sync Changes" and "Publish Branch".
+    fn sync_action(&self, cx: &App) -> Option<SyncAction> {
+        if self.entry_count > 0 || self.is_branch_mode() || !self.can_push_and_pull(cx) {
+            return None;
+        }
+        let repository = self.active_repository.as_ref()?.read(cx);
+        let branch = repository.branch.as_ref()?;
+        match &branch.upstream {
+            None
+            | Some(Upstream {
+                tracking: UpstreamTracking::Gone,
+                ..
+            }) => Some(SyncAction::Publish),
+            Some(Upstream {
+                tracking: UpstreamTracking::Tracked(UpstreamTrackingStatus { ahead, behind }),
+                ..
+            }) => match (*ahead, *behind) {
+                (0, 0) => None,
+                (ahead, 0) => Some(SyncAction::Push { ahead }),
+                (ahead, behind) => Some(SyncAction::Sync { ahead, behind }),
+            },
+        }
+    }
+
+    /// Pulls, then pushes what's left to push once the pull has finished and the
+    /// branch's tracking status has caught up.
+    fn sync_changes(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        const POLL_INTERVAL: Duration = Duration::from_millis(250);
+        const MAX_POLLS: usize = 40;
+
+        self.pull(false, window, cx);
+        cx.spawn_in(window, async move |this, cx| {
+            while this.read_with(cx, |this, _| this.pending_remote_operation.is_some())? {
+                cx.background_executor().timer(POLL_INTERVAL).await;
+            }
+            // A failed pull leaves the branch behind, so nothing is pushed.
+            for _ in 0..MAX_POLLS {
+                let action = this.read_with(cx, |this, cx| this.sync_action(cx))?;
+                match action {
+                    Some(SyncAction::Push { .. }) => {
+                        this.update_in(cx, |this, window, cx| this.push(false, false, window, cx))?;
+                        break;
+                    }
+                    Some(SyncAction::Sync { .. }) => {
+                        cx.background_executor().timer(POLL_INTERVAL).await;
+                    }
+                    Some(SyncAction::Publish) | None => break,
+                }
+            }
+            anyhow::Ok(())
+        })
+        .detach_and_log_err(cx);
+    }
+
+    /// The commit button's place when there's nothing to commit but the branch
+    /// differs from its remote: one button that publishes, pushes, or pulls and
+    /// then pushes, with the number of commits each way.
+    fn render_vscode_sync_button(&self, action: SyncAction, cx: &mut Context<Self>) -> AnyElement {
+        let in_progress = self.pending_remote_operation.is_some();
+        let (icon, label, tooltip): (IconName, SharedString, &'static str) = match action {
+            SyncAction::Publish => (
+                IconName::ArrowUp,
+                "Publish Branch".into(),
+                "Publish this branch to the remote",
+            ),
+            SyncAction::Push { ahead } => (
+                IconName::ArrowCircle,
+                format!("Sync Changes  {ahead}↑").into(),
+                "Push the commits that aren't on the remote yet",
+            ),
+            SyncAction::Sync { ahead, behind } => (
+                IconName::ArrowCircle,
+                if ahead > 0 {
+                    format!("Sync Changes  {behind}↓ {ahead}↑").into()
+                } else {
+                    format!("Sync Changes  {behind}↓").into()
+                },
+                "Pull the remote's new commits, then push yours",
+            ),
+        };
+        let label = if in_progress {
+            "Syncing…".into()
+        } else {
+            label
+        };
+
+        v_flex()
+            .w_full()
+            .child(
+                ButtonLike::new("vscode-sync-button")
+                    .style(ButtonStyle::Outlined)
+                    .layer(ElevationIndex::ModalSurface)
+                    .full_width()
+                    .height(COMMIT_BUTTON_HEIGHT.into())
+                    .disabled(in_progress)
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .justify_center()
+                            .gap_1p5()
+                            .child(Icon::new(icon).size(IconSize::Small).color(if in_progress {
+                                Color::Disabled
+                            } else {
+                                Color::Muted
+                            }))
+                            .child(Label::new(label).color(if in_progress {
+                                Color::Disabled
+                            } else {
+                                Color::Default
+                            })),
+                    )
+                    .tooltip(Tooltip::text(tooltip))
+                    .on_click(cx.listener(move |this, _, window, cx| match action {
+                        SyncAction::Publish | SyncAction::Push { .. } => {
+                            this.push(false, false, window, cx)
+                        }
+                        SyncAction::Sync { .. } => this.sync_changes(window, cx),
+                    })),
+            )
+            .into_any_element()
+    }
+
     /// A full width commit button with the commit options in a menu next to it,
     /// like VS Code's.
-    fn render_vscode_commit_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_vscode_commit_button(&self, cx: &mut Context<Self>) -> AnyElement {
+        if let Some(action) = self.sync_action(cx) {
+            return self.render_vscode_sync_button(action, cx);
+        }
         let (can_commit, tooltip) = self.configure_commit_button(cx);
         let title = self.commit_button_title();
         let editor_focus_handle = self.commit_editor.focus_handle(cx);
@@ -611,10 +738,13 @@ impl GitPanel {
 
         // A column stretches the split button, which has no width of its own,
         // across the panel.
-        v_flex().w_full().child(SplitButton::new(
-            commit_button,
-            self.render_vscode_commit_menu(cx).into_any_element(),
-        ))
+        v_flex()
+            .w_full()
+            .child(SplitButton::new(
+                commit_button,
+                self.render_vscode_commit_menu(cx).into_any_element(),
+            ))
+            .into_any_element()
     }
 
     /// The commit options (amend, signoff, skip hooks), as in the classic
@@ -943,4 +1073,11 @@ impl GitPanel {
                     .children(rows)
             }))
     }
+}
+
+#[derive(Clone, Copy)]
+enum SyncAction {
+    Publish,
+    Push { ahead: u32 },
+    Sync { ahead: u32, behind: u32 },
 }

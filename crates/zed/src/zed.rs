@@ -2,6 +2,7 @@ mod app_menus;
 pub mod edit_prediction_registry;
 #[cfg(target_os = "macos")]
 pub(crate) mod mac_only_instance;
+mod markdown_toolbar;
 mod migrate;
 #[cfg(target_os = "macos")]
 pub(crate) mod move_to_applications;
@@ -1507,6 +1508,8 @@ fn initialize_pane(
             let quick_action_bar =
                 cx.new(|cx| QuickActionBar::new(buffer_search_bar, workspace, cx));
             toolbar.add_item(quick_action_bar, window, cx);
+            let markdown_toolbar = cx.new(|_| markdown_toolbar::MarkdownToolbar::new(workspace));
+            toolbar.add_item(markdown_toolbar, window, cx);
             let diagnostic_editor_controls = cx.new(|_| diagnostics::ToolbarControls::new());
             toolbar.add_item(diagnostic_editor_controls, window, cx);
             let project_search_bar = cx.new(|_| ProjectSearchBar::new());
