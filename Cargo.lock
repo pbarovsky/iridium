@@ -14445,6 +14445,7 @@ dependencies = [
  "language",
  "picker",
  "project",
+ "settings",
  "ui",
  "util",
  "workspace",

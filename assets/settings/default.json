@@ -1008,6 +1008,12 @@
     // Where to dock the search panel. Can be 'left' or 'right'.
     "dock": "left",
   },
+  // Quick Open: the picker the title bar's command center opens.
+  "quick_open": {
+    // Whether the shortcuts for the file finder, command palette, symbol
+    // pickers and go to line open Quick Open in the matching mode instead.
+    "replace_built_in_pickers": true,
+  },
   "extensions_panel": {
     // Whether to show the extensions panel button in the activity bar
     "button": true,

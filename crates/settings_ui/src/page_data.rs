@@ -4560,7 +4560,7 @@ fn window_and_layout_page() -> SettingsPage {
         ]
     }
 
-    fn title_bar_section() -> [SettingsPageItem; 7] {
+    fn title_bar_section() -> [SettingsPageItem; 8] {
         [
             SettingsPageItem::SectionHeader("Title Bar"),
             SettingsPageItem::SettingItem(SettingItem {
@@ -4769,6 +4769,29 @@ fn window_and_layout_page() -> SettingsPage {
                     },
                     write: |settings_content, value, _| {
                         settings_content.title_bar.get_or_insert_default().show_command_center_navigation = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Quick Open Replaces Built-in Pickers",
+                description: "Open Quick Open, in the matching mode, with the shortcuts for the file finder, command palette, symbol pickers and go to line.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("quick_open.replace_built_in_pickers"),
+                    pick: |settings_content| {
+                        settings_content
+                            .quick_open
+                            .as_ref()?
+                            .replace_built_in_pickers
+                            .as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content
+                            .quick_open
+                            .get_or_insert_default()
+                            .replace_built_in_pickers = value;
                     },
                 }),
                 metadata: None,

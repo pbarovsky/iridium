@@ -222,6 +222,7 @@ impl VsCodeSettings {
             outline_panel: self.outline_panel_settings_content(),
             search_panel: None,
             extensions_panel: None,
+            quick_open: None,
             preview_tabs: self.preview_tabs_settings_content(),
             project: self.project_settings_content(),
             project_panel: self.project_panel_settings_content(),

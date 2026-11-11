@@ -2178,12 +2178,14 @@ pub fn handle_keymap_file_changes(
     let mut old_vim_enabled = VimModeSetting::get_global(cx).0;
     let mut old_helix_enabled = vim_mode_setting::HelixModeSetting::get_global(cx).0;
     let mut old_disable_ai = DisableAiSettings::get_global(cx).disable_ai;
+    let mut old_quick_open_pickers = quick_open::replaces_built_in_pickers(cx);
 
     cx.observe_global::<SettingsStore>(move |cx| {
         let new_base_keymap = *BaseKeymap::get_global(cx);
         let new_vim_enabled = VimModeSetting::get_global(cx).0;
         let new_helix_enabled = vim_mode_setting::HelixModeSetting::get_global(cx).0;
         let new_disable_ai = DisableAiSettings::get_global(cx).disable_ai;
+        let new_quick_open_pickers = quick_open::replaces_built_in_pickers(cx);
 
         if new_disable_ai != old_disable_ai {
             reload_menus(cx);
@@ -2193,7 +2195,9 @@ pub fn handle_keymap_file_changes(
             || new_vim_enabled != old_vim_enabled
             || new_helix_enabled != old_helix_enabled
             || new_disable_ai != old_disable_ai
+            || new_quick_open_pickers != old_quick_open_pickers
         {
+            old_quick_open_pickers = new_quick_open_pickers;
             old_base_keymap = new_base_keymap;
             old_vim_enabled = new_vim_enabled;
             old_helix_enabled = new_helix_enabled;
@@ -2372,6 +2376,13 @@ fn reload_keymaps(cx: &mut App, mut user_key_bindings: Vec<KeyBinding>) {
         key_binding.set_meta(KeybindSource::User.meta());
     }
     cx.bind_keys(filter_disabled_ai_bindings(user_key_bindings, cx));
+    // Iridium: the pickers' shortcuts open Quick Open instead, in every keymap
+    // (not in Zed's tests, which check its own keymaps).
+    if !cfg!(test) && quick_open::replaces_built_in_pickers(cx) {
+        let bindings: Vec<KeyBinding> = cx.key_bindings().borrow().bindings().cloned().collect();
+        cx.clear_key_bindings();
+        cx.bind_keys(quick_open::with_quick_open_bindings(bindings, cx));
+    }
     reload_menus(cx);
     // On Windows, this is set in the `update_jump_list` method of the `HistoryManager`.
     #[cfg(not(target_os = "windows"))]

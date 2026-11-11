@@ -160,6 +160,9 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   `>` — команды (тот же список и фильтр, что у палитры команд), `@` — символы открытого
   файла, `#` — символы проекта через языковые серверы, `:` — строка (`N` или
   `N:колонка`), `%` — поиск текста по проекту (открывает поиск Zed с этим запросом),
+  «Run Task» открывает стандартное окно задач Zed (`task::Spawn`) на его обычном
+  месте; Quick Open рисуется поверх Command Center общим помощником
+  `workspace::quick_open::render_over_command_center` / `overlay_width`,
   `?` — список режимов. На пустом запросе, как в VS Code, сверху режимы («Go to File»,
   «Show and Run Commands», «Search for Text», «Go to Symbol…», «Go to Line», «Run
   Task», «More») с сочетаниями клавиш соответствующих палитр Zed (`HELP`), ниже через
@@ -171,8 +174,20 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   возвращается. Ширина палитры — ширина поля (не меньше 360 px). Без фокуса (нет
   открытых файлов) команды выполняются на workspace. Стёртый префикс возвращает к файлам. Открывается
   поверх Command Center (`ModalView::render_bare`), клик вне — закрыть.
-  Ctrl+P, Ctrl+Shift+P и остальные палитры Zed не тронуты; `{"query": ">"}` позволяет
-  уже сейчас привязать Quick Open к любым клавишам вместо них.
+- **Quick Open вместо встроенных палитр** — настройка
+  `quick_open.replace_built_in_pickers` (по умолчанию `true`; Settings → Window &
+  Layout → Title Bar → Quick Open Replaces Built-in Pickers). После загрузки всех
+  раскладок (`reload_keymaps` в `zed.rs`) сразу за каждым сочетанием `file_finder::Toggle`,
+  `command_palette::Toggle`, `outline::Toggle`, `project_symbols::Toggle`,
+  `go_to_line::Toggle` вставляется такое же (те же клавиши и контекст) для
+  `quick_open::Toggle` с префиксом `""`, `>`, `@`, `#`, `:`; сочетания тех же
+  действий с другими параметрами не трогаются. Alt+Shift+T (`task::Spawn`) по-прежнему
+  открывает стандартное окно задач Zed
+  (`quick_open::with_quick_open_bindings`). Так работает с любой базовой раскладкой, а
+  более поздние сочетания (свои в `keymap.json`) по-прежнему главнее. Переключение
+  настройки перезагружает раскладки. В тестах Zed не применяется. Подсказки сочетаний в
+  списке режимов берутся из всей раскладки (`shortcut_for`), а не только для текущего
+  фокуса.
 - Справа три кнопки раскладки, как в VS Code: левая боковая панель (левый док),
   нижняя панель (нижний док), боковая панель тредов агента. Иконки
   `assets/icons/layout_*.svg`.
@@ -352,9 +367,7 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
 - **Quick Open, дальше.** Иконки видов символов в `@` и `#` (готового сопоставления
   «вид → иконка» в Zed нет, у outline-элементов вида нет); подписи секций «recently
   opened» / «files» в режиме файлов, как в VS Code; предпросмотр для `#` и `:`.
-  Настройка «заменить встроенные палитры»: Ctrl+P, Ctrl+Shift+P, Ctrl+G, Ctrl+Shift+O
-  открывают Quick Open с нужным префиксом. Проверить «Shift Shift» при быстром наборе
-  заглавных букв.
+  Проверить «Shift Shift» при быстром наборе заглавных букв.
 
 ## Заметки для разработки
 
@@ -366,7 +379,8 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
 - У пользователя бывают открыты свой `target/debug/iridium .` и официальный Zed.
   Никогда не завершать процессы по шаблону имени — только запущенные самим собой PID.
 - **Свои каталоги**: `paths::APP_NAME = "Iridium"`, поэтому настройки в
-  `~/.config/iridium` (settings.json, keymap.json, themes/), данные, расширения,
+  `~/.config/iridium` (settings.json, keymap.json, themes/, tasks.json, debug.json —
+  перенесены из `~/.config/zed`), данные, расширения,
   языковые серверы, БД и сокет единственного экземпляра — в `~/.local/share/iridium`,
   лог — `~/.local/share/iridium/logs/Iridium.log`, кеш — `~/.cache/iridium`.
   С установленным Zed ничего не общее.

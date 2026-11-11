@@ -283,6 +283,9 @@ pub struct SettingsContent {
     /// Configuration for the extensions panel.
     pub extensions_panel: Option<ExtensionsPanelSettingsContent>,
 
+    /// Configuration for Quick Open, the command center's picker.
+    pub quick_open: Option<QuickOpenSettingsContent>,
+
     pub project_panel: Option<ProjectPanelSettingsContent>,
 
     /// Configuration for Node-related features
@@ -420,7 +423,7 @@ fallible_options::flattened_deserialize!(SettingsContent {
         agent_servers, audio, auto_update, base_keymap, collaboration_panel, debugger, diagnostics,
         git,
         global_lsp_settings, image_viewer, markdown_preview, repl, helix_mode, hide_mouse,
-        journal, log, line_indicator_format, language_models, copilot, outline_panel, search_panel, extensions_panel, project_panel,
+        journal, log, line_indicator_format, language_models, copilot, outline_panel, search_panel, extensions_panel, quick_open, project_panel,
         node, network, proxy, reduce_motion, server_url, credentials_url, session, telemetry, terminal,
         title_bar, vim_mode, calls, which_key, vim, modeline_lines, feature_flags,
         instrumentation,
@@ -1252,6 +1255,17 @@ pub struct SearchPanelSettingsContent {
     ///
     /// Default: left
     pub dock: Option<DockSide>,
+}
+
+#[with_fallible_options]
+#[derive(Clone, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug, PartialEq)]
+pub struct QuickOpenSettingsContent {
+    /// Whether the shortcuts for the file finder, command palette, symbol
+    /// pickers and go to line open Quick Open in the matching mode instead,
+    /// like VS Code's quick input.
+    ///
+    /// Default: true
+    pub replace_built_in_pickers: Option<bool>,
 }
 
 #[with_fallible_options]

@@ -19,23 +19,22 @@ use fuzzy_nucleo::{
     PathMatchOptions, StringMatch, StringMatchCandidate, StringMatchOptions, match_path_sets,
     match_strings,
 };
+use gpui::KeyBinding;
 use gpui::{
-    Action, App, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable, MouseButton,
-    Pixels, Render, Task, WeakEntity, Window, px,
+    Action, App, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable, Render, Task,
+    WeakEntity, Window,
 };
 use language::{OutlineItem, Point};
 use picker::{Picker, PickerDelegate};
 use project::{PathMatchCandidateSet, Project, ProjectPath, WorktreeId};
-use ui::{HighlightedLabel, KeyBinding, ListItem, ListItemSpacing, prelude::*};
+use settings::{RegisterSetting, Settings};
+use ui::{HighlightedLabel, ListItem, ListItemSpacing, prelude::*};
 use util::ResultExt as _;
 use workspace::{ModalView, Workspace};
 use zed_actions::quick_open::Toggle;
 
 const MAX_RECENT_FILES: usize = 20;
 const MAX_MATCHES: usize = 100;
-/// How far below the command center's top the picker opens, so its input
-/// sits where the command center's box was.
-const TOP_OFFSET: f32 = 0.;
 
 pub fn init(cx: &mut App) {
     cx.observe_new(|workspace: &mut Workspace, _, _| {
@@ -153,7 +152,9 @@ impl QuickOpen {
             };
             let picker = cx.new(|cx| {
                 let picker = Picker::uniform_list(delegate, window, cx)
-                    .initial_width(rems(quick_open_width(window, cx) / window.rem_size()))
+                    .initial_width(rems(
+                        workspace::quick_open::overlay_width(window, cx) / window.rem_size(),
+                    ))
                     .resizable(false)
                     .show_scrollbar(true);
                 picker.set_query(&query, window, cx);
@@ -162,6 +163,7 @@ impl QuickOpen {
             if let Some(editor) = active_editor {
                 load_symbols(&picker, &editor, window, cx);
             }
+
             Self { picker }
         });
         workspace::quick_open::set_quick_open_shown(true, window, cx);
@@ -234,36 +236,15 @@ impl ModalView for QuickOpen {
 
 impl Render for QuickOpen {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let viewport = window.viewport_size();
-        let width = quick_open_width(window, cx);
-        let (left, top) = match workspace::quick_open::command_center_bounds(window, cx) {
-            Some(bounds) => {
-                let center = bounds.center().x;
-                let left = (center - width / 2.)
-                    .max(px(8.))
-                    .min(viewport.width - width - px(8.));
-                (left, bounds.top() + px(TOP_OFFSET))
-            }
-            None => ((viewport.width - width) / 2., px(8.)),
-        };
-        div()
-            .absolute()
-            .inset_0()
-            .occlude()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|_, _, _, cx| cx.emit(DismissEvent)),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .left(left)
-                    .top(top)
-                    .w(width)
-                    .occlude()
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(self.picker.clone()),
-            )
+        let quick_open = cx.entity().downgrade();
+        workspace::quick_open::render_over_command_center(
+            self.picker.clone().into_any_element(),
+            move |_, cx| {
+                quick_open.update(cx, |_, cx| cx.emit(DismissEvent)).ok();
+            },
+            window,
+            cx,
+        )
     }
 }
 
@@ -349,6 +330,8 @@ const HELP: [HelpEntry; 8] = [
         action: || Box::new(editor::actions::ToggleGoToLine),
     },
     HelpEntry {
+        // Zed's own task window, with its Debug, Attach and Launch tabs; it
+        // opens over the command center too.
         prefix: None,
         description: "Run Task",
         action: || Box::new(zed_actions::Spawn::modal()),
@@ -953,7 +936,7 @@ impl PickerDelegate for QuickOpenDelegate {
                                             .color(Color::Muted),
                                     )
                                 })
-                                .child(KeyBinding::for_action_in(
+                                .child(ui::KeyBinding::for_action_in(
                                     &*command.action,
                                     &self.previous_focus,
                                     cx,
@@ -1012,11 +995,7 @@ impl PickerDelegate for QuickOpenDelegate {
                                 .map(|prefix| Label::new(prefix).color(Color::Muted)),
                         )
                         .child(div().flex_1())
-                        .child(KeyBinding::for_action_in(
-                            &*(entry.action)(),
-                            &self.previous_focus,
-                            cx,
-                        )),
+                        .children(shortcut_for(&*(entry.action)(), cx)),
                 )
             }
             Match::Text(text) => {
@@ -1052,13 +1031,86 @@ fn go_to_line(
     });
 }
 
-/// As wide as the command center it opens over, like VS Code's, but never
-/// too narrow to read.
-fn quick_open_width(window: &Window, cx: &App) -> Pixels {
-    const DEFAULT_WIDTH: f32 = 600.;
-    const MIN_WIDTH: f32 = 360.;
-    let width = workspace::quick_open::command_center_bounds(window, cx)
-        .map_or(px(DEFAULT_WIDTH), |bounds| bounds.size.width)
-        .max(px(MIN_WIDTH));
-    width.min(window.viewport_size().width - px(16.))
+#[derive(Clone, Copy, Debug, RegisterSetting)]
+pub struct QuickOpenSettings {
+    pub replace_built_in_pickers: bool,
+}
+
+impl Settings for QuickOpenSettings {
+    fn from_settings(content: &settings::SettingsContent) -> Self {
+        let quick_open = content.quick_open.clone().unwrap_or_default();
+        Self {
+            replace_built_in_pickers: quick_open.replace_built_in_pickers.unwrap_or(true),
+        }
+    }
+}
+
+/// The Quick Open mode that replaces each of Zed's pickers. Only bindings for
+/// exactly these actions are replaced, not ones with other arguments (e.g. a
+/// task spawned by name).
+const REPLACED_PICKERS: [(fn() -> Box<dyn Action>, &str); 5] = [
+    (|| Box::new(workspace::ToggleFileFinder::default()), ""),
+    (|| Box::new(zed_actions::command_palette::Toggle), ">"),
+    (|| Box::new(zed_actions::outline::ToggleOutline), "@"),
+    (|| Box::new(workspace::ToggleProjectSymbols), "#"),
+    (|| Box::new(editor::actions::ToggleGoToLine), ":"),
+];
+
+pub fn replaces_built_in_pickers(cx: &App) -> bool {
+    QuickOpenSettings::get_global(cx).replace_built_in_pickers
+}
+
+/// `bindings` with, right after each one that opens one of Zed's pickers, the
+/// same keystrokes in the same context opening Quick Open in that mode. Right
+/// after, so it wins over the picker's binding but not over a later one for
+/// the same keys (e.g. the user's own).
+pub fn with_quick_open_bindings(bindings: Vec<KeyBinding>, cx: &App) -> Vec<KeyBinding> {
+    let os = cx.platform_info().os;
+    let mut result = Vec::with_capacity(bindings.len());
+    for binding in bindings {
+        let replacement = REPLACED_PICKERS
+            .iter()
+            .find(|(action, _)| binding.action().partial_eq(&*action()))
+            .and_then(|(_, prefix)| {
+                let keystrokes = binding
+                    .keystrokes()
+                    .iter()
+                    .map(|keystroke| keystroke.unparse(os))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let action = Toggle {
+                    query: (!prefix.is_empty()).then(|| prefix.to_string()),
+                };
+                let mut replacement = KeyBinding::load(
+                    &keystrokes,
+                    Box::new(action),
+                    binding.predicate(),
+                    false,
+                    None,
+                    cx,
+                )
+                .log_err()?;
+                if let Some(meta) = binding.meta() {
+                    replacement.set_meta(meta);
+                }
+                Some(replacement)
+            });
+        result.push(binding);
+        result.extend(replacement);
+    }
+    result
+}
+
+/// The keystrokes of the highest precedence binding for `action` anywhere in
+/// the keymap, whatever is focused: Quick Open's hints show the shortcut of
+/// each mode's picker even when that picker's context (e.g. the editor) isn't
+/// focused.
+fn shortcut_for(action: &dyn Action, cx: &App) -> Option<ui::KeyBinding> {
+    let keymap = cx.key_bindings();
+    let keymap = keymap.borrow();
+    let binding = keymap.bindings_for_action(action).last()?;
+    Some(ui::KeyBinding::from_keystrokes(
+        binding.keystrokes().into(),
+        false,
+    ))
 }
