@@ -634,6 +634,9 @@
     "context": "Workspace",
     "use_key_equivalents": true,
     "bindings": {
+      // Iridium: Quick Open (search box in the title bar), like JetBrains'
+      // Search Everywhere.
+      "shift shift": "quick_open::Toggle",
       "alt-/": "which_key::ShowPendingBindings",
       // Move focus between the major regions of the window (editor, open
       // panels, status bar). Accessibility navigation; mirrors VS Code's

@@ -4560,7 +4560,7 @@ fn window_and_layout_page() -> SettingsPage {
         ]
     }
 
-    fn title_bar_section() -> [SettingsPageItem; 5] {
+    fn title_bar_section() -> [SettingsPageItem; 7] {
         [
             SettingsPageItem::SectionHeader("Title Bar"),
             SettingsPageItem::SettingItem(SettingItem {
@@ -4737,6 +4737,38 @@ fn window_and_layout_page() -> SettingsPage {
                             .title_bar
                             .get_or_insert_default()
                             .open_menus_on_hover = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Command Center",
+                description: "Show a search box in the middle of the title bar that opens Quick Open (also Shift Shift).",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("title_bar.show_command_center"),
+                    pick: |settings_content| {
+                        settings_content.title_bar.as_ref()?.show_command_center.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content.title_bar.get_or_insert_default().show_command_center = value;
+                    },
+                }),
+                metadata: None,
+                files: USER,
+            }),
+            SettingsPageItem::SettingItem(SettingItem {
+                title: "Command Center Navigation",
+                description: "Show back and forward buttons next to the command center.",
+                field: Box::new(SettingField {
+                    organization_override: None,
+                    json_path: Some("title_bar.show_command_center_navigation"),
+                    pick: |settings_content| {
+                        settings_content.title_bar.as_ref()?.show_command_center_navigation.as_ref()
+                    },
+                    write: |settings_content, value, _| {
+                        settings_content.title_bar.get_or_insert_default().show_command_center_navigation = value;
                     },
                 }),
                 metadata: None,

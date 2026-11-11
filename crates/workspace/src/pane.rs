@@ -409,6 +409,7 @@ pub struct Pane {
     was_focused: bool,
     active_item_index: usize,
     preview_item_id: Option<EntityId>,
+    pub(crate) tab_selection: crate::tab_selection::TabSelection,
     last_focus_handle_by_item: HashMap<EntityId, WeakFocusHandle>,
     nav_history: NavHistory,
     toolbar: Entity<Toolbar>,
@@ -580,6 +581,7 @@ impl Pane {
             zoomed: false,
             active_item_index: 0,
             preview_item_id: None,
+            tab_selection: Default::default(),
             max_tabs,
             use_max_tabs,
             last_focus_handle_by_item: Default::default(),
@@ -2946,6 +2948,7 @@ impl Pane {
                 ClosePosition::Right => ui::TabCloseSide::End,
             })
             .toggle_state(is_active)
+            .multi_selected(self.is_tab_multi_selected(item_id))
             .on_click(cx.listener({
                 let item_handle = item.boxed_clone();
                 move |pane: &mut Self, event: &ClickEvent, window, cx| {
@@ -2964,6 +2967,7 @@ impl Pane {
                             return;
                         }
                     }
+                    pane.select_tab_for_click(ix, event, cx);
                     pane.activate_item(ix, true, true, window, cx)
                 }
             }))
@@ -3060,7 +3064,7 @@ impl Pane {
                     .size(ButtonSize::None)
                     .icon_size(IconSize::Small)
                     .on_click(cx.listener(move |pane, _, window, cx| {
-                        pane.close_item_by_id(item_id, SaveIntent::Close, window, cx)
+                        pane.close_tab_or_selection(item_id, window, cx)
                             .detach_and_log_err(cx);
                     }))
                 }

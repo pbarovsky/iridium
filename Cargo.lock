@@ -14432,6 +14432,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick_open"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "command_palette",
+ "command_palette_hooks",
+ "editor",
+ "file_icons",
+ "fuzzy_nucleo",
+ "gpui",
+ "language",
+ "picker",
+ "project",
+ "ui",
+ "util",
+ "workspace",
+ "zed_actions",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22525,6 +22545,7 @@ dependencies = [
  "project_symbols",
  "prompt_store",
  "proto",
+ "quick_open",
  "rayon",
  "recent_projects",
  "release_channel",

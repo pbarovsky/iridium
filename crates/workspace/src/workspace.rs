@@ -12,6 +12,7 @@ pub mod notification_center;
 pub mod notifications;
 pub mod pane;
 pub mod pane_group;
+pub mod quick_open;
 pub mod path_list {
     pub use util::path_list::{PathList, SerializedPathList};
 }
@@ -20,6 +21,7 @@ mod persistence;
 pub mod searchable;
 pub mod security_modal;
 pub mod shared_screen;
+mod tab_selection;
 pub use shared_screen::SharedScreen;
 pub mod focus_follows_mouse;
 mod status_bar;

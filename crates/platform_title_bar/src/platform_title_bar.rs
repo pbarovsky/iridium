@@ -317,6 +317,9 @@ impl Render for PlatformTitleBar {
                     .justify_between()
                     .overflow_x_hidden()
                     .w_full()
+                    // Full height, so children centered in it (like Iridium's
+                    // command center) aren't cut off.
+                    .h_full()
                     .children(children),
             )
             .when(

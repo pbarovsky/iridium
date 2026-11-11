@@ -624,6 +624,11 @@
     "show_menus": false,
     // Whether to open the menus in the titlebar on hover.
     "open_menus_on_hover": false,
+    // Whether to show the command center: a search box in the middle of the
+    // title bar that opens Quick Open (also Shift Shift).
+    "show_command_center": true,
+    // Whether to show back and forward buttons next to the command center.
+    "show_command_center_navigation": false,
     // The layout of window control buttons in the title bar (Linux only).
     "button_layout": "platform_default",
   },

@@ -402,7 +402,7 @@ impl GitPanel {
 
     fn render_vscode_commit_area(
         &self,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         self.active_repository.as_ref()?;
@@ -412,7 +412,6 @@ impl GitPanel {
             cx,
         );
         let editor_focus_handle = self.commit_editor.focus_handle(cx);
-        let editor_focused = editor_focus_handle.is_focused(window);
 
         let max_title_length = GitPanelSettings::get_global(cx).commit_title_max_length;
         let title_exceeds_limit = max_title_length > 0
@@ -471,10 +470,9 @@ impl GitPanel {
             .children(self.render_generate_commit_message_button(cx))
             .children(self.render_co_authors(cx));
 
+        // No focus ring: other inputs in Iridium's panels don't have one.
         let input_border = if title_exceeds_limit {
             cx.theme().status().warning_border
-        } else if editor_focused {
-            colors.border_focused
         } else {
             colors.border
         };

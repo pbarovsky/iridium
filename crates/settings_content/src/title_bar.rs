@@ -93,6 +93,15 @@ pub struct TitleBarSettingsContent {
     ///
     /// Default: false
     pub open_menus_on_hover: Option<bool>,
+    /// Whether to show the command center: a search box in the middle of the
+    /// title bar that opens Quick Open.
+    ///
+    /// Default: true
+    pub show_command_center: Option<bool>,
+    /// Whether to show back and forward buttons next to the command center.
+    ///
+    /// Default: false
+    pub show_command_center_navigation: Option<bool>,
     /// The layout of window control buttons in the title bar (Linux only).
     ///
     /// This can be set to "platform_default" to follow the system configuration, or

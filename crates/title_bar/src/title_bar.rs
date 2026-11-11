@@ -1,5 +1,6 @@
 mod application_menu;
 pub mod collab;
+mod command_center;
 mod onboarding_banner;
 mod project_status_item;
 mod title_bar_settings;
@@ -178,6 +179,7 @@ pub struct TitleBar {
     update_version: Entity<UpdateVersion>,
     screen_share_popover_handle: PopoverMenuHandle<ContextMenu>,
     _diagnostics_subscription: Option<gpui::Subscription>,
+    command_center_layout: command_center::CommandCenterLayout,
 }
 
 impl Render for TitleBar {
@@ -202,14 +204,17 @@ impl Render for TitleBar {
         let title_bar_settings = *TitleBarSettings::get_global(cx);
         let button_layout = title_bar_settings.button_layout;
 
-        let mut children = <ArrayVec<_, 5>>::new();
+        let mut children = <ArrayVec<_, 6>>::new();
+        let layout = self.command_center_layout.clone();
 
         // The project name, worktree and branch live in the status bar
         // (see `ProjectStatusItem`), as in VS Code.
         children.push(
             h_flex()
+                .relative()
                 .h_full()
                 .gap_0p5()
+                .child(layout.measure(true))
                 .when_some(self.application_menu.clone(), |title_bar, menu| {
                     // The app's logo leads the menus, as in VS Code.
                     title_bar
@@ -227,7 +232,18 @@ impl Render for TitleBar {
                 .into_any_element(),
         );
 
-        children.push(self.render_collaborator_list(window, cx).into_any_element());
+        children.extend(command_center::render_command_center(
+            &self.workspace,
+            &layout,
+            window,
+            cx,
+        ));
+
+        // Empty but full width outside a call, which would cover the command
+        // center.
+        if ActiveCall::global(cx).read(cx).room().is_some() {
+            children.push(self.render_collaborator_list(window, cx).into_any_element());
+        }
 
         if title_bar_settings.show_onboarding_banner {
             if let Some(banner) = &self.banner {
@@ -240,9 +256,11 @@ impl Render for TitleBar {
 
         children.push(
             h_flex()
+                .relative()
                 .pr_1()
                 .gap_1()
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(layout.measure(false))
                 .child(self.render_call_controls(window, cx))
                 .children(self.render_connection_status(status, cx))
                 .child(self.update_version.clone())
@@ -440,6 +458,7 @@ impl TitleBar {
             client,
             _subscriptions: subscriptions,
             banner,
+            command_center_layout: Default::default(),
             update_version,
             screen_share_popover_handle: PopoverMenuHandle::default(),
             _diagnostics_subscription: None,

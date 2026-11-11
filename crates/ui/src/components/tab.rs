@@ -16,6 +16,7 @@ pub enum TabCloseSide {
 pub struct Tab {
     div: Stateful<Div>,
     selected: bool,
+    multi_selected: bool,
     close_side: TabCloseSide,
     start_slot: Option<AnyElement>,
     end_slot: Option<AnyElement>,
@@ -30,11 +31,19 @@ impl Tab {
                 .id(id.clone())
                 .debug_selector(|| format!("TAB-{}", id)),
             selected: false,
+            multi_selected: false,
             close_side: TabCloseSide::End,
             start_slot: None,
             end_slot: None,
             children: SmallVec::new(),
         }
+    }
+
+    /// Marks the tab as one of several selected tabs, which get highlighted
+    /// even when they aren't the active one.
+    pub fn multi_selected(mut self, multi_selected: bool) -> Self {
+        self.multi_selected = multi_selected;
+        self
     }
 
     pub fn close_side(mut self, close_side: TabCloseSide) -> Self {
@@ -141,6 +150,10 @@ impl RenderOnce for Tab {
             .map(|this| {
                 if self.selected {
                     this.bg(selected_background).border_color(colors.border)
+                } else if self.multi_selected {
+                    this.bg(hover_background)
+                        .border_color(colors.border_variant)
+                        .hover(|style| style.bg(selected_background))
                 } else {
                     this.border_color(gpui::transparent_black())
                         .hover(|style| style.bg(hover_background))

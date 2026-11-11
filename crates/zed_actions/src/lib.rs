@@ -788,6 +788,24 @@ pub struct Rerun {
     pub task_id: Option<String>,
 }
 
+pub mod quick_open {
+    use gpui::Action;
+    use schemars::JsonSchema;
+    use serde::Deserialize;
+
+    /// Opens Quick Open, the search box in the title bar: files, or by the
+    /// query's first character commands (`>`), symbols in the file (`@`),
+    /// symbols in the project (`#`) or a line (`:`).
+    #[derive(Clone, Default, PartialEq, Deserialize, JsonSchema, Action)]
+    #[action(namespace = quick_open)]
+    #[serde(deny_unknown_fields)]
+    pub struct Toggle {
+        /// The query to open with, e.g. ">" for commands.
+        #[serde(default)]
+        pub query: Option<String>,
+    }
+}
+
 pub mod outline {
     use std::sync::OnceLock;
 
