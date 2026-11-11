@@ -955,8 +955,10 @@ fn update_command_palette_filter(cx: &mut App) {
                 }
             }
 
-            filter.show_namespace("zed_predict_onboarding");
-            filter.show_action_types(&[TypeId::of::<zed_actions::OpenZedPredictOnboarding>()]);
+            // Iridium has no Zed account, so the onboarding for Zed's cloud
+            // edit predictions stays hidden.
+            filter.hide_namespace("zed_predict_onboarding");
+            filter.hide_action_types(&[TypeId::of::<zed_actions::OpenZedPredictOnboarding>()]);
 
             filter.show_namespace("multi_workspace");
         }

@@ -55,6 +55,18 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   пункты Help «Zed Repository» / «Zed Twitter», раскладка клавиш «Zed», тема иконок
   «Zed (Default)», HTTP `User-Agent: Zed/…` (по нему zed.dev отдаёт расширения),
   тексты про CLI `zed`.
+- Палитра команд, подсказки клавиш и редактор раскладки показывают команды группы
+  `zed::` как `iridium: …` (`humanize_action_name` в `command_palette.rs`); в
+  `keymap.json` они по-прежнему пишутся `zed::…`, поэтому раскладки Zed работают.
+  Скрыты из палитры команды только для Zed: `cli: register zed scheme` (отобрала бы
+  ссылки `zed://` у установленного Zed), `feedback: email zed`, `open zed repo`
+  (`initialize_workspace` в `zed.rs`) и онбординг облачных предсказаний Zed (его
+  больше не показывает `agent_ui.rs`, раньше включал обратно при включённом AI).
+- Меню Help: «Iridium Repository» (новая команда `iridium: open repository`,
+  `feedback::OpenRepository`), «File Bug Report» и «Request Feature» открывают issues
+  в github.com/pbarovsky/iridium (баг-репорт — с характеристиками системы в тексте).
+  Убраны «Zed Twitter», «Join the Team», «Email Us». «Documentation» ведёт на
+  zed.dev/docs — своей документации у Iridium нет.
 - Удалено всё про Delta (продукт команды Zed): карточка анонса «Introducing Delta»
   (`auto_update_ui`), компонент `DeltaIllustration` и картинки `delta_*.svg`.
 - Удалены тарифы zed.dev: экраны «Welcome to Zed Pro/Business/VIP/Student/Trial»
@@ -64,12 +76,28 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   `onboarding.rs`); логотип рядом с ними — цвета фона редактора, чуть темнее (на почти чёрном фоне —
   светлее), как «тиснение» на приветствии VS Code (`welcome::logo_watermark_color`).
 - Каталоги настроек и данных — см. «Заметки для разработки» (`paths::APP_NAME`).
+- **Бинарник `iridium`** (`[[bin]]` и `default-run` в `crates/zed/Cargo.toml`; пакет
+  cargo остаётся `zed`, чтобы не менять зависимости и слияния с Zed): `target/debug/iridium`.
+  Проверка Zed «`APP_NAME` = имя бинарника» в `main.rs` снова включена.
+- **CLI `iridium`** (`crates/cli`): ищет редактор в `../libexec/iridium-editor`,
+  `../lib/iridium/iridium-editor`, а в сборке разработчика — `./iridium` рядом с собой.
+  «Install CLI» ставит `/usr/local/bin/iridium` (macOS).
+- **Пакет и установка под Linux**: `script/bundle-linux` собирает
+  `iridium-linux-<arch>.tar.gz` с `iridium$suffix.app/{libexec/iridium-editor,bin/iridium}`,
+  иконкой `iridium.png` и `.desktop` из `crates/zed/resources/iridium.desktop.in` с id
+  `io.github.pbarovsky.Iridium*` (совпадает с `ReleaseChannel::app_id`).
+  `script/install-linux` ставит его сам (не через `install.sh` Zed): `~/.local/iridium.app`,
+  `~/.local/bin/iridium`, `~/.local/share/applications/io.github.pbarovsky.Iridium*.desktop` —
+  рядом с установленным Zed, ничего у него не трогая. `.desktop` Iridium не
+  регистрирует обработчик ссылок `zed://` (их открывает установленный Zed).
+- Не переименовывается: пакет cargo `zed`, переменные окружения `ZED_*`, схема
+  `zed://`, папка проекта `.zed/` (совместимость с проектами и ссылками Zed), архив
+  `zed-remote-server-*` (сервер для удалённой разработки, совместим с Zed).
 
 Осталось:
-- Бинарник и крейт `zed` (`target/debug/zed`, CLI `zed`), скрипты сборки и установки
-  (`script/bundle-*`, `install-linux`), имя `.desktop`-файла, flatpak-манифест
-  (CLI проверяет `FLATPAK_ID` на `dev.zed.Zed`).
-- Схема ссылок `zed://`, папка проекта `.zed/` (вместе с совместимостью — решить).
+- Flatpak и snap не переделаны под Iridium (манифесты, id `dev.zed.Zed`, проверка
+  `FLATPAK_ID` в CLI, `zed-editor` внутри flatpak). Скрипты сборки macOS и Windows
+  исправлены только под новое имя бинарника и не проверялись.
 - Подзаголовок онбординга «The editor for what's next» — слоган Zed.
 - Остатки Zed AI и тарифов, недостижимые без входа в аккаунт: карточка входа и
   «Free plan» в онбординге агента (`ai_onboarding`), предложение после пробного
@@ -265,7 +293,7 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   настройках. Серверы Zed, без которых не обойтись, работают как раньше: каталог и
   обновления расширений (api.zed.dev), скачивание сервера для удалённой разработки
   по SSH, реестр агентов.
-- Проверка: `timeout 90 strace -f -e trace=execve,connect -o /tmp/net.txt target/debug/zed .`
+- Проверка: `timeout 90 strace -f -e trace=execve,connect -o /tmp/net.txt target/debug/iridium .`
   и посчитать соединения на `:443`, кроме `127.0.0.*` (с настройками по умолчанию
   ожидается только `api.zed.dev/extensions/updates` при запуске).
 
@@ -291,17 +319,16 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
 ## Заметки для разработки
 
 - Пользователь пишет по-русски.
-- Сборка: `cargo build`, бинарник `target/debug/zed`. Диск маленький: полная debug-сборка
+- Сборка: `cargo build`, бинарник `target/debug/iridium` (CLI — `target/debug/cli`). Диск маленький: полная debug-сборка
   ~23 ГБ, а `target/debug/incremental` разрастается до 30+ ГБ — удалять его в начале
   каждой задачи, до правок и сборки; при нехватке места — `cargo clean`.
   `cargo test` на крупные крейты обычно не помещается.
-- У пользователя бывают открыты свой `target/debug/zed .` и официальный Zed.
+- У пользователя бывают открыты свой `target/debug/iridium .` и официальный Zed.
   Никогда не завершать процессы по шаблону имени — только запущенные самим собой PID.
 - **Свои каталоги**: `paths::APP_NAME = "Iridium"`, поэтому настройки в
   `~/.config/iridium` (settings.json, keymap.json, themes/), данные, расширения,
   языковые серверы, БД и сокет единственного экземпляра — в `~/.local/share/iridium`,
   лог — `~/.local/share/iridium/logs/Iridium.log`, кеш — `~/.cache/iridium`.
-  С установленным Zed ничего не общее. Бинарник пока называется `zed`
-  (`target/debug/zed`), поэтому проверка «APP_NAME = имя бинарника» из `main.rs` убрана.
+  С установленным Zed ничего не общее.
 - Правило из `.rules`: при изменении исходников первые строки `README.md` —
   баннер `> [!IMPORTANT]`; его не удалять.

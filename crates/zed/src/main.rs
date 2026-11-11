@@ -5,8 +5,15 @@ mod reliability;
 mod watcher_debug;
 mod zed;
 
-// Iridium names its directories after itself (paths::APP_NAME) while the
-// binary is still called zed, so Zed's check that the two match is left out.
+// Ensure the binary name stays in sync with APP_NAME so that the paths used
+// at runtime (data dir, config dir, etc.) match what the binary is called.
+const _: () = assert!(
+    paths::APP_NAME_LOWERCASE
+        .as_bytes()
+        .eq_ignore_ascii_case(env!("CARGO_BIN_NAME").as_bytes()),
+    "paths::APP_NAME_LOWERCASE must match the binary name. \
+     Forks: update APP_NAME in crates/paths/src/paths.rs when renaming the binary.",
+);
 
 use agent_ui::AgentPanel;
 use anyhow::{Context as _, Result};
@@ -397,7 +404,7 @@ fn main() {
                         app_version.patch,
                     )
                     .to_string(),
-                    binary: "zed".to_string(),
+                    binary: "iridium".to_string(),
                     release_channel: release_channel::RELEASE_CHANNEL_NAME.clone(),
                     commit_sha: app_commit_sha
                         .as_ref()
@@ -1630,7 +1637,7 @@ fn stdout_is_a_pty() -> bool {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "zed", disable_version_flag = true, max_term_width = 100)]
+#[command(name = "iridium", disable_version_flag = true, max_term_width = 100)]
 struct Args {
     /// A sequence of space-separated paths or urls that you want to open.
     ///

@@ -865,6 +865,16 @@ impl PickerDelegate for CommandPaletteDelegate {
 }
 
 pub fn humanize_action_name(name: &str) -> String {
+    // Iridium shows the actions in Zed's `zed` namespace as its own; their
+    // names, as written in keymaps, stay `zed::…`.
+    let iridium_name;
+    let name = match name.strip_prefix("zed::") {
+        Some(action) => {
+            iridium_name = format!("iridium::{action}");
+            iridium_name.as_str()
+        }
+        None => name,
+    };
     let chars = name.chars().collect::<Vec<_>>();
     let capacity = name.len() + chars.iter().filter(|c| c.is_uppercase()).count();
     let mut result = String::with_capacity(capacity);
@@ -975,6 +985,10 @@ mod tests {
             "agent: open project AGENTS.md rules"
         );
         assert_eq!(humanize_action_name("editor::OpenURL"), "editor: open URL");
+        assert_eq!(
+            humanize_action_name("zed::OpenSettingsFile"),
+            "iridium: open settings file"
+        );
         assert_eq!(
             humanize_action_name("editor::OpenURLParser"),
             "editor: open URL parser"

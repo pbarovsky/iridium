@@ -420,7 +420,7 @@ pub fn build_window_options(display_uuid: Option<Uuid>, cx: &mut App) -> WindowO
             height: px(240.0),
         }),
         tabbing_identifier: if use_system_window_tabs {
-            Some(String::from("zed"))
+            Some(String::from("iridium"))
         } else {
             None
         },
@@ -430,6 +430,17 @@ pub fn build_window_options(display_uuid: Option<Uuid>, cx: &mut App) -> WindowO
 }
 
 pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
+    // Commands that only make sense for Zed itself: registering Iridium for
+    // `zed://` links would take them from an installed Zed, and the others
+    // reach the Zed team's email and cloud predictions.
+    command_palette_hooks::CommandPaletteFilter::update_global(cx, |filter, _| {
+        filter.hide_action_types(&[
+            std::any::TypeId::of::<install_cli::RegisterZedScheme>(),
+            std::any::TypeId::of::<zed_actions::feedback::EmailZed>(),
+            std::any::TypeId::of::<feedback::OpenZedRepo>(),
+            std::any::TypeId::of::<zed_actions::OpenZedPredictOnboarding>(),
+        ]);
+    });
     let mut _on_close_subscription = bind_on_window_closed(cx);
     cx.observe_global::<SettingsStore>(move |cx| {
         // A 1.92 regression causes unused-assignment to trigger on this variable.

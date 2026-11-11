@@ -11,6 +11,8 @@ actions!(
     [
         /// Opens the Zed repository on GitHub.
         OpenZedRepo,
+        /// Opens the Iridium repository on GitHub.
+        OpenRepository,
         /// Copies installed extensions to the clipboard for bug reports.
         CopyInstalledExtensionsIntoClipboard
     ]
@@ -18,18 +20,17 @@ actions!(
 
 const ZED_REPO_URL: &str = "https://github.com/zed-industries/zed";
 
-const REQUEST_FEATURE_URL: &str = "https://github.com/zed-industries/zed/discussions/new/choose";
+const IRIDIUM_REPO_URL: &str = "https://github.com/pbarovsky/iridium";
+
+// Bugs and feature requests go to Iridium's repository, which has no issue
+// templates: a bug report starts with the system specs in its body.
+const REQUEST_FEATURE_URL: &str = "https://github.com/pbarovsky/iridium/issues/new";
 
 fn file_bug_report_url(specs: &SystemSpecs) -> String {
+    let body = format!("\n\n**Environment**\n\n```\n{specs}\n```\n");
     format!(
-        concat!(
-            "https://github.com/zed-industries/zed/issues/new",
-            "?",
-            "template=10_bug_report.yml",
-            "&",
-            "environment={}"
-        ),
-        urlencoding::encode(&specs.to_string())
+        "https://github.com/pbarovsky/iridium/issues/new?body={}",
+        urlencoding::encode(&body)
     )
 }
 
@@ -110,6 +111,9 @@ pub fn init(cx: &mut App) {
             })
             .register_action(move |_, _: &OpenZedRepo, _, cx| {
                 cx.open_url(ZED_REPO_URL);
+            })
+            .register_action(move |_, _: &OpenRepository, _, cx| {
+                cx.open_url(IRIDIUM_REPO_URL);
             });
     })
     .detach();

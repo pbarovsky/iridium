@@ -22443,6 +22443,7 @@ dependencies = [
  "codestral",
  "collections",
  "command_palette",
+ "command_palette_hooks",
  "component_preview",
  "copilot",
  "copilot_chat",

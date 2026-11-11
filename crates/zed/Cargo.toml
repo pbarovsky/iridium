@@ -6,7 +6,7 @@ version = "1.29.0"
 publish.workspace = true
 license = "GPL-3.0-or-later"
 authors = ["Zed Team <hi@zed.dev>"]
-default-run = "zed"
+default-run = "iridium"
 
 [lints]
 workspace = true
@@ -55,7 +55,7 @@ visual-tests = [
 ]
 
 [[bin]]
-name = "zed"
+name = "iridium"
 path = "src/main.rs"
 
 [[bin]]
@@ -92,6 +92,7 @@ clock = { workspace = true, optional = true }
 codestral.workspace = true
 collections.workspace = true
 command_palette.workspace = true
+command_palette_hooks.workspace = true
 component_preview.workspace = true
 copilot.workspace = true
 copilot_chat.workspace = true

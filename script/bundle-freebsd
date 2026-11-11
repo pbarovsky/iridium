@@ -137,7 +137,7 @@ fi
 # fi
 
 # mkdir -p "${zed_dir}/share/applications"
-# envsubst <"crates/zed/resources/zed.desktop.in" >"${zed_dir}/share/applications/zed$suffix.desktop"
+# envsubst <"crates/zed/resources/iridium.desktop.in" >"${zed_dir}/share/applications/zed$suffix.desktop"
 # chmod +x "${zed_dir}/share/applications/zed$suffix.desktop"
 
 # Copy generated licenses so they'll end up in archive too
