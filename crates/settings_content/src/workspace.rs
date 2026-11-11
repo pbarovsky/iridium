@@ -555,6 +555,11 @@ pub struct TabBarSettingsContent {
     ///
     /// Default: false
     pub show_pinned_tabs_in_separate_row: Option<bool>,
+    /// Whether tabs that don't fit wrap onto more rows instead of scrolling,
+    /// like VS Code's `workbench.editor.wrapTabs`.
+    ///
+    /// Default: false
+    pub wrap_tabs: Option<bool>,
 }
 
 #[derive(

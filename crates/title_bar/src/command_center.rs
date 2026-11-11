@@ -75,21 +75,23 @@ impl CommandCenterLayout {
 
     /// Where the command center goes, relative to the title bar's content,
     /// and how wide it is.
-    fn place(&self, window: &Window) -> Option<(Pixels, Pixels)> {
+    fn place(&self, navigation: Pixels, window: &Window) -> Option<(Pixels, Pixels)> {
         let measurements = self.0.get()?;
         let gap = px(GAP);
+        // The navigation buttons sit left of the box, so they need room too.
+        let left_end = measurements.left_end + navigation;
         let center = window.viewport_size().width / 2.;
-        let half = (center - measurements.left_end).min(measurements.right_start - center) - gap;
+        let half = (center - left_end).min(measurements.right_start - center) - gap;
         let (left, width) = if half * 2. >= px(MIN_CENTERED_WIDTH) {
             let width = (half * 2.).min(px(MAX_WIDTH));
             (center - width / 2., width)
         } else {
-            let space = measurements.right_start - measurements.left_end - gap * 2.;
+            let space = measurements.right_start - left_end - gap * 2.;
             if space < px(MIN_WIDTH) {
                 return None;
             }
             let width = space.min(px(MAX_WIDTH));
-            (measurements.left_end + gap + (space - width) / 2., width)
+            (left_end + gap + (space - width) / 2., width)
         };
         Some((left - measurements.origin, width))
     }
@@ -103,7 +105,12 @@ pub(crate) fn render_command_center(
 ) -> Option<AnyElement> {
     let settings = TitleBarSettings::get_global(cx);
     let show_navigation = settings.show_command_center_navigation;
-    let placement = layout.place(window);
+    let navigation_width = if show_navigation {
+        px(NAVIGATION_WIDTH)
+    } else {
+        px(0.)
+    };
+    let placement = layout.place(navigation_width, window);
     let (workspace_entity, (left, width)) = match (
         workspace.upgrade().filter(|_| settings.show_command_center),
         placement,
@@ -193,11 +200,6 @@ pub(crate) fn render_command_center(
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(|_, window, cx| window.dispatch_action(Box::new(Toggle::default()), cx));
 
-    let navigation_width = if show_navigation {
-        px(NAVIGATION_WIDTH)
-    } else {
-        px(0.)
-    };
     Some(
         h_flex()
             .absolute()

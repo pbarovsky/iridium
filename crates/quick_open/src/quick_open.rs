@@ -140,6 +140,12 @@ impl QuickOpen {
                 symbols: Vec::new(),
                 project_symbols: Vec::new(),
                 file_line: None,
+                recent_commands: command_palette::recently_used_command_names(cx),
+                recent_command_rows: 0,
+                latest_query: String::new(),
+                prev_scroll_position: active_editor
+                    .as_ref()
+                    .map(|editor| editor.update(cx, |editor, cx| editor.scroll_position(cx))),
                 matches: Vec::new(),
                 separator_after: None,
                 selected_index: 0,
@@ -186,6 +192,7 @@ fn load_symbols(
                         name: item.text.into(),
                         depth: item.depth,
                         position: multibuffer.anchor_in_buffer(item.range.start)?,
+                        end: multibuffer.anchor_in_buffer(item.range.end)?,
                     })
                 })
                 .collect();
@@ -269,7 +276,14 @@ struct Symbol {
     name: SharedString,
     depth: usize,
     position: Anchor,
+    end: Anchor,
 }
+
+/// Highlights the symbol being previewed while browsing `@`.
+enum PreviewHighlight {}
+
+/// How many recently run commands `>` lists before the rest.
+const MAX_RECENT_COMMANDS: usize = 8;
 
 enum Match {
     File {
@@ -378,6 +392,15 @@ struct QuickOpenDelegate {
     project_symbols: Vec<project::Symbol>,
     /// The line to open the picked file at, from a `path:line` query.
     file_line: Option<(u32, Option<u32>)>,
+    /// Commands run before, most recent first.
+    recent_commands: Vec<SharedString>,
+    /// How many of the matches are recently run commands, which get a label.
+    recent_command_rows: usize,
+    /// The query without its prefix, recorded with the commands run.
+    latest_query: String,
+    /// Where the active editor was scrolled, to go back to after previewing
+    /// symbols without picking one.
+    prev_scroll_position: Option<gpui::Point<editor::scroll::ScrollOffset>>,
     matches: Vec<Match>,
     /// Draws a line between the help entries and the recent files.
     separator_after: Option<usize>,
@@ -554,6 +577,72 @@ impl QuickOpenDelegate {
         .detach_and_log_err(cx);
     }
 
+    /// All commands, the recently run ones first (as VS Code's "recently
+    /// used"), then the rest by name.
+    fn commands_with_recent_first(&mut self) -> Vec<Match> {
+        let unmatched = |id: usize| StringMatch {
+            candidate_id: id,
+            score: 0.,
+            positions: Vec::new(),
+            string: SharedString::default(),
+        };
+        let recent: Vec<usize> = self
+            .recent_commands
+            .iter()
+            .filter_map(|name| {
+                self.commands
+                    .iter()
+                    .position(|command| &command.name == name)
+            })
+            .take(MAX_RECENT_COMMANDS)
+            .collect();
+        self.recent_command_rows = recent.len();
+        if !recent.is_empty() && recent.len() < self.commands.len() {
+            self.separator_after = Some(recent.len() - 1);
+        }
+        recent
+            .iter()
+            .copied()
+            .chain((0..self.commands.len()).filter(|id| !recent.contains(id)))
+            .map(|id| Match::Command(unmatched(id)))
+            .collect()
+    }
+
+    /// Shows the symbol at `ix` in the editor while browsing `@`, like the
+    /// outline does.
+    fn preview_symbol(&self, ix: usize, cx: &mut App) {
+        let (Some(Match::Symbol(symbol_match)), Some(editor)) =
+            (self.matches.get(ix), &self.active_editor)
+        else {
+            return;
+        };
+        let Some(symbol) = self.symbols.get(symbol_match.candidate_id) else {
+            return;
+        };
+        let range = symbol.position..symbol.end;
+        editor.update(cx, |editor, cx| {
+            editor.clear_row_highlights::<PreviewHighlight>();
+            editor.highlight_rows::<PreviewHighlight>(
+                range,
+                |cx| cx.theme().colors().editor_highlighted_line_background,
+                editor::RowHighlightOptions {
+                    autoscroll: true,
+                    ..Default::default()
+                },
+                cx,
+            );
+            editor.request_autoscroll(Autoscroll::center(), cx);
+        });
+    }
+
+    fn clear_preview(&self, cx: &mut App) {
+        if let Some(editor) = &self.active_editor {
+            editor.update(cx, |editor, _| {
+                editor.clear_row_highlights::<PreviewHighlight>()
+            });
+        }
+    }
+
     fn match_names<'a>(
         names: impl Iterator<Item = &'a SharedString>,
         query: &str,
@@ -598,8 +687,9 @@ impl PickerDelegate for QuickOpenDelegate {
         self.selected_index
     }
 
-    fn set_selected_index(&mut self, ix: usize, _: &mut Window, _: &mut Context<Picker<Self>>) {
+    fn set_selected_index(&mut self, ix: usize, _: &mut Window, cx: &mut Context<Picker<Self>>) {
         self.selected_index = ix;
+        self.preview_symbol(ix, cx);
     }
 
     fn can_select(&self, ix: usize, _: &mut Window, _: &mut Context<Picker<Self>>) -> bool {
@@ -618,6 +708,11 @@ impl PickerDelegate for QuickOpenDelegate {
     ) -> Task<()> {
         let (mode, query) = Mode::parse(&query);
         self.selected_index = 0;
+        self.latest_query = query.to_string();
+        self.recent_command_rows = 0;
+        if mode != Mode::FileSymbols {
+            self.clear_preview(cx);
+        }
         self.file_line = None;
         let (file_query, file_line) = parse_file_query(query);
         self.separator_after = None;
@@ -640,6 +735,7 @@ impl PickerDelegate for QuickOpenDelegate {
                 return self.search_files(file_query.to_string(), window, cx);
             }
             Mode::Help => (0..HELP.len()).map(Match::Help).collect(),
+            Mode::Commands if query.is_empty() => self.commands_with_recent_first(),
             Mode::Commands => Self::match_names(self.commands.iter().map(|c| &c.name), query)
                 .into_iter()
                 .map(Match::Command)
@@ -740,6 +836,11 @@ impl PickerDelegate for QuickOpenDelegate {
                     return;
                 };
                 let action = command.action.boxed_clone();
+                command_palette::record_command_invocation(
+                    command.name.clone(),
+                    self.latest_query.clone(),
+                    cx,
+                );
                 window.focus(&self.previous_focus, cx);
                 self.dismiss(cx);
                 window.dispatch_action(action, cx);
@@ -752,6 +853,7 @@ impl PickerDelegate for QuickOpenDelegate {
                 };
                 let position = symbol.position;
                 let editor = editor.clone();
+                self.clear_preview(cx);
                 self.dismiss(cx);
                 editor.update(cx, |editor, cx| {
                     editor.change_selections(
@@ -786,7 +888,14 @@ impl PickerDelegate for QuickOpenDelegate {
         }
     }
 
-    fn dismissed(&mut self, _: &mut Window, cx: &mut Context<Picker<Self>>) {
+    fn dismissed(&mut self, window: &mut Window, cx: &mut Context<Picker<Self>>) {
+        // Back to where the editor was before previewing symbols.
+        self.clear_preview(cx);
+        if let (Some(editor), Some(position)) = (&self.active_editor, self.prev_scroll_position) {
+            editor.update(cx, |editor, cx| {
+                editor.set_scroll_position(position, window, cx)
+            });
+        }
         self.dismiss(cx);
     }
 
@@ -834,11 +943,22 @@ impl PickerDelegate for QuickOpenDelegate {
                             command.name.clone(),
                             command_match.positions.clone(),
                         ))
-                        .child(KeyBinding::for_action_in(
-                            &*command.action,
-                            &self.previous_focus,
-                            cx,
-                        )),
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .when(ix < self.recent_command_rows, |this| {
+                                    this.child(
+                                        Label::new("recently used")
+                                            .size(LabelSize::Small)
+                                            .color(Color::Muted),
+                                    )
+                                })
+                                .child(KeyBinding::for_action_in(
+                                    &*command.action,
+                                    &self.previous_focus,
+                                    cx,
+                                )),
+                        ),
                 )
             }
             Match::Symbol(symbol_match) => {

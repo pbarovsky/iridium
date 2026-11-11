@@ -11,6 +11,7 @@ pub struct TabBar {
     children: SmallVec<[AnyElement; 2]>,
     end_children: SmallVec<[AnyElement; 2]>,
     scroll_handle: Option<ScrollHandle>,
+    wrap: bool,
 }
 
 impl TabBar {
@@ -21,7 +22,15 @@ impl TabBar {
             children: SmallVec::new(),
             end_children: SmallVec::new(),
             scroll_handle: None,
+            wrap: false,
         }
+    }
+
+    /// Lets the bar grow by rows to fit its children, which wrap instead of
+    /// scrolling; the start and end children stay on the first row.
+    pub fn wrap(mut self, wrap: bool) -> Self {
+        self.wrap = wrap;
+        self
     }
 
     pub fn track_scroll(mut self, scroll_handle: &ScrollHandle) -> Self {
@@ -97,38 +106,52 @@ impl RenderOnce for TabBar {
             .flex()
             .flex_none()
             .w_full()
-            .h(Tab::container_height(cx))
+            .map(|this| {
+                if self.wrap {
+                    this.min_h(Tab::container_height(cx)).items_start()
+                } else {
+                    this.h(Tab::container_height(cx))
+                }
+            })
             .bg(cx.theme().colors().tab_bar_background)
             .when(!self.start_children.is_empty(), |this| {
                 this.child(
                     h_flex()
                         .flex_none()
+                        .h(Tab::container_height(cx))
                         .gap(DynamicSpacing::Base04.rems(cx))
                         .px(DynamicSpacing::Base06.rems(cx))
                         .children(self.start_children),
                 )
             })
-            .child(
-                div()
-                    .relative()
-                    .flex_1()
-                    .h_full()
-                    .overflow_x_hidden()
-                    .child(
-                        h_flex()
-                            .id("tabs")
-                            .flex_grow_1()
-                            .overflow_x_scroll()
-                            .when_some(self.scroll_handle, |cx, scroll_handle| {
-                                cx.track_scroll(&scroll_handle)
-                            })
-                            .children(self.children),
-                    ),
-            )
+            .map(|this| {
+                if self.wrap {
+                    this.child(div().flex_1().min_w_0().children(self.children))
+                } else {
+                    this.child(
+                        div()
+                            .relative()
+                            .flex_1()
+                            .h_full()
+                            .overflow_x_hidden()
+                            .child(
+                                h_flex()
+                                    .id("tabs")
+                                    .flex_grow_1()
+                                    .overflow_x_scroll()
+                                    .when_some(self.scroll_handle, |cx, scroll_handle| {
+                                        cx.track_scroll(&scroll_handle)
+                                    })
+                                    .children(self.children),
+                            ),
+                    )
+                }
+            })
             .when(!self.end_children.is_empty(), |this| {
                 this.child(
                     h_flex()
                         .flex_none()
+                        .h(Tab::container_height(cx))
                         .gap(DynamicSpacing::Base04.rems(cx))
                         .px(DynamicSpacing::Base06.rems(cx))
                         .children(self.end_children),

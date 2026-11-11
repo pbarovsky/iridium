@@ -3650,6 +3650,24 @@ impl Pane {
         window: &mut Window,
         cx: &mut Context<Pane>,
     ) -> AnyElement {
+        if TabBarSettings::get_global(cx).wrap_tabs {
+            // Pinned tabs first, then the rest, all wrapping onto rows, like
+            // VS Code's wrapped tabs.
+            let tabs = wrapped_tabs("wrapped tabs", cx)
+                .children(pinned_tabs)
+                .children(unpinned_tabs)
+                .child(self.render_tab_bar_drop_target(tab_count, cx));
+            return self
+                .configure_tab_bar_start(
+                    TabBar::new("tab_bar").wrap(true),
+                    navigate_backward,
+                    navigate_forward,
+                    window,
+                    cx,
+                )
+                .child(tabs)
+                .into_any_element();
+        }
         let tab_bar = self
             .configure_tab_bar_start(
                 TabBar::new("tab_bar"),
@@ -3689,6 +3707,34 @@ impl Pane {
         window: &mut Window,
         cx: &mut Context<Pane>,
     ) -> AnyElement {
+        if TabBarSettings::get_global(cx).wrap_tabs {
+            // Both rows wrap: pinned tabs in theirs, the rest in theirs.
+            let pinned_tab_bar = self
+                .configure_tab_bar_start(
+                    TabBar::new("pinned_tab_bar").wrap(true),
+                    navigate_backward,
+                    navigate_forward,
+                    window,
+                    cx,
+                )
+                .child(
+                    wrapped_tabs("pinned_tabs_row", cx)
+                        .debug_selector(|| "pinned_tabs_row".into())
+                        .children(pinned_tabs)
+                        .child(self.render_pinned_tab_bar_drop_target(cx)),
+                );
+            let unpinned_tab_bar = TabBar::new("unpinned_tab_bar").wrap(true).child(
+                wrapped_tabs("unpinned tabs", cx)
+                    .children(unpinned_tabs)
+                    .child(self.render_tab_bar_drop_target(tab_count, cx)),
+            );
+            return v_flex()
+                .w_full()
+                .flex_none()
+                .child(pinned_tab_bar)
+                .child(unpinned_tab_bar)
+                .into_any_element();
+        }
         let pinned_tab_bar = self
             .configure_tab_bar_start(
                 TabBar::new("pinned_tab_bar"),
@@ -5162,6 +5208,21 @@ impl Render for DraggedTab {
             .render(window, cx)
             .font(ui_font)
     }
+}
+
+/// A row of tabs that wraps onto more rows instead of scrolling (the
+/// `tab_bar.wrap_tabs` setting), with a small gap between rows.
+fn wrapped_tabs(id: &'static str, cx: &App) -> gpui::Stateful<Div> {
+    const ROW_GAP: Pixels = px(4.);
+    let padding = (Tab::container_height(cx) - Tab::chip_height()) / 2.;
+    h_flex()
+        .id(id)
+        .flex_wrap()
+        .w_full()
+        .gap_x_1()
+        .gap_y(ROW_GAP)
+        .px_1()
+        .py(padding)
 }
 
 #[cfg(test)]

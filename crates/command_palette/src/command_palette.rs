@@ -864,6 +864,30 @@ impl PickerDelegate for CommandPaletteDelegate {
     }
 }
 
+/// The names of commands run from the command palette (or Iridium's Quick
+/// Open), most recently run first; empty when command history is off.
+pub fn recently_used_command_names(cx: &App) -> Vec<SharedString> {
+    if !CommandPaletteSettings::get_global(cx).use_command_history {
+        return Vec::new();
+    }
+    let Ok(mut commands) = CommandPaletteDB::global(cx).list_commands_used() else {
+        return Vec::new();
+    };
+    commands.sort_by(|a, b| b.last_invoked.cmp(&a.last_invoked));
+    commands
+        .into_iter()
+        .map(|command| command.command_name.into())
+        .collect()
+}
+
+/// Records that a command was run, for the command history (used by
+/// Iridium's Quick Open).
+pub fn record_command_invocation(name: SharedString, query: String, cx: &App) {
+    let db = CommandPaletteDB::global(cx);
+    cx.background_spawn(async move { db.write_command_invocation(name, query).await })
+        .detach_and_log_err(cx);
+}
+
 pub fn humanize_action_name(name: &str) -> String {
     // Iridium shows the actions in Zed's `zed` namespace as its own; their
     // names, as written in keymaps, stay `zed::…`.
