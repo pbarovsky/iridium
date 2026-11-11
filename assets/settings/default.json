@@ -1736,9 +1736,9 @@
   //
   // Default: false
   "disable_ai": false,
-  // Automatically update Zed. This setting may be ignored on Linux if
-  // installed through a package manager.
-  "auto_update": true,
+  // Iridium doesn't update itself: Zed's update server would install Zed over
+  // it, and Iridium has no update server of its own.
+  "auto_update": false,
   // How to render LSP `textDocument/documentColor` colors in the editor.
   //
   // Possible values:
@@ -1892,7 +1892,7 @@
     },
     "commit_view": {
       // Whether newly opened commit views show the full commit description.
-      "expand_description": false,
+      "expand_description": true,
       // Whether newly opened commit views expand every changed file.
       "expand_files": true,
     },

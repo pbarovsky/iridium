@@ -176,7 +176,7 @@ impl HttpClient for NetworkGuardClient {
             log::info!(target: LOG_TARGET, "blocked, offline: {method} {target}");
             return Box::pin(async move {
                 Err(anyhow::anyhow!(
-                    "Zed is offline, so it didn't request {target}"
+                    "Iridium is offline, so it didn't request {target}"
                 ))
             });
         }

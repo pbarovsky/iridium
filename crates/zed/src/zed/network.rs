@@ -130,7 +130,7 @@ fn show_download_prompt(prompt: Arc<OpenPrompt>, cx: &mut App) {
     show_app_notification(id, cx, move |cx| {
         let prompt = prompt.clone();
         cx.new(|cx| {
-            MessageNotification::new(format!("Zed wants to download {}.", prompt.subject), cx)
+            MessageNotification::new(format!("Iridium wants to download {}.", prompt.subject), cx)
                 .primary_message("Download")
                 .primary_icon(IconName::Download)
                 .primary_on_click({

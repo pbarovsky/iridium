@@ -874,7 +874,7 @@ impl github::Host for WasmState {
             std::fs::read_dir(self.work_dir()).is_ok_and(|mut entries| entries.next().is_some());
         if has_downloads && !::http_client::network_guard::allows_automatic_updates() {
             return Ok(Err(format!(
-                "background updates are off, so Zed didn't check {repo} for a new release"
+                "background updates are off, so Iridium didn't check {repo} for a new release"
             )));
         }
         maybe!(async {

@@ -199,7 +199,9 @@ impl ReleaseChannel {
 
     /// Returns whether we want to poll for updates for this [`ReleaseChannel`]
     pub fn poll_for_updates(&self) -> bool {
-        !matches!(self, ReleaseChannel::Dev)
+        // Zed's update server serves Zed's builds, which would replace Iridium,
+        // and Iridium has no update server of its own.
+        false
     }
 
     /// Returns the display name for this [`ReleaseChannel`].

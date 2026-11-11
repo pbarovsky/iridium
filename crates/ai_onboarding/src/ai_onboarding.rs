@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use client::{Client, UserStore, zed_urls};
 use gpui::{AnyElement, Entity, IntoElement, ParentElement, TaskExt};
-use ui::{Divider, RegisterComponent, Tooltip, Vector, VectorName, prelude::*};
+use ui::{Divider, RegisterComponent, Tooltip, prelude::*};
 
 #[derive(PartialEq)]
 pub enum SignInStatus {
@@ -80,61 +80,6 @@ impl ZedAiOnboarding {
     ) -> Self {
         self.dismiss_onboarding = Some(Arc::new(dismiss_callback));
         self
-    }
-
-    fn certified_user_stamp(cx: &App) -> impl IntoElement {
-        div().absolute().bottom_1().right_1().child(
-            Vector::new(
-                VectorName::ProUserStamp,
-                rems_from_px(156_f32),
-                rems_from_px(60_f32),
-            )
-            .color(Color::Custom(cx.theme().colors().text_accent.alpha(0.8))),
-        )
-    }
-
-    fn pro_trial_stamp(cx: &App) -> impl IntoElement {
-        div().absolute().bottom_1().right_1().child(
-            Vector::new(
-                VectorName::ProTrialStamp,
-                rems_from_px(156_f32),
-                rems_from_px(60_f32),
-            )
-            .color(Color::Custom(cx.theme().colors().text.alpha(0.8))),
-        )
-    }
-
-    fn business_stamp(cx: &App) -> impl IntoElement {
-        div().absolute().bottom_1().right_1().child(
-            Vector::new(
-                VectorName::BusinessStamp,
-                rems_from_px(156_f32),
-                rems_from_px(60_f32),
-            )
-            .color(Color::Custom(cx.theme().colors().text_accent.alpha(0.8))),
-        )
-    }
-
-    fn vip_stamp(cx: &App) -> impl IntoElement {
-        div().absolute().bottom_1().right_1().child(
-            Vector::new(
-                VectorName::VipStamp,
-                rems_from_px(156_f32),
-                rems_from_px(60_f32),
-            )
-            .color(Color::Custom(cx.theme().colors().text.alpha(0.8))),
-        )
-    }
-
-    fn student_stamp(cx: &App) -> impl IntoElement {
-        div().absolute().bottom_1().right_1().child(
-            Vector::new(
-                VectorName::StudentStamp,
-                rems_from_px(156_f32),
-                rems_from_px(60_f32),
-            )
-            .color(Color::Custom(cx.theme().colors().text.alpha(0.8))),
-        )
     }
 
     fn render_dismiss_button(&self) -> Option<AnyElement> {
@@ -291,105 +236,13 @@ impl ZedAiOnboarding {
                 .into_any_element()
         }
     }
-
-    fn render_trial_state(&self, cx: &mut App) -> AnyElement {
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Self::pro_trial_stamp(cx))
-            .child(Headline::new("Welcome to the Zed Pro Trial"))
-            .child(
-                Label::new("Included for 14 days from when your trial started:")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.pro_trial(false))
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
-
-    fn render_pro_plan_state(&self, cx: &mut App) -> AnyElement {
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Self::certified_user_stamp(cx))
-            .child(Headline::new("Welcome to Zed Pro"))
-            .child(
-                Label::new("Here's what you get:")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.pro_plan())
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
-
-    fn render_business_plan_state(&self, cx: &mut App) -> AnyElement {
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Self::business_stamp(cx))
-            .child(Headline::new("Welcome to Zed Business"))
-            .child(
-                Label::new("Here's what you get:")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.business_plan())
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
-
-    fn render_vip_plan_state(&self, cx: &mut App) -> AnyElement {
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Self::vip_stamp(cx))
-            .child(Headline::new("Welcome to Zed VIP"))
-            .child(
-                Label::new("Here's what you get:")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.vip_plan())
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
-
-    fn render_student_plan_state(&self, cx: &mut App) -> AnyElement {
-        v_flex()
-            .w_full()
-            .relative()
-            .gap_1()
-            .child(Self::student_stamp(cx))
-            .child(Headline::new("Welcome to Zed Student"))
-            .child(
-                Label::new("Here's what you get:")
-                    .color(Color::Muted)
-                    .mb_2(),
-            )
-            .child(PlanDefinitions.student_plan())
-            .children(self.render_dismiss_button())
-            .into_any_element()
-    }
 }
 
 impl RenderOnce for ZedAiOnboarding {
     fn render(self, _window: &mut ui::Window, cx: &mut App) -> impl IntoElement {
         if matches!(self.sign_in_status, SignInStatus::SignedIn) {
-            match self.plan {
-                None => self.render_free_plan_state(cx),
-                Some(Plan::ZedFree) => self.render_free_plan_state(cx),
-                Some(Plan::ZedProTrial) => self.render_trial_state(cx),
-                Some(Plan::ZedPro) => self.render_pro_plan_state(cx),
-                Some(Plan::ZedBusiness) => self.render_business_plan_state(cx),
-                Some(Plan::ZedVip) => self.render_vip_plan_state(cx),
-                Some(Plan::ZedStudent) => self.render_student_plan_state(cx),
-            }
+            // Iridium has no zed.dev plans to welcome anyone to.
+            self.render_free_plan_state(cx)
         } else {
             self.render_sign_in_disclaimer(cx)
         }
@@ -452,26 +305,6 @@ impl Component for ZedAiOnboarding {
                 single_example(
                     "Free Plan",
                     onboarding(SignInStatus::SignedIn, Some(Plan::ZedFree), false),
-                ),
-                single_example(
-                    "Pro Trial",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::ZedProTrial), false),
-                ),
-                single_example(
-                    "Pro Plan",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::ZedPro), false),
-                ),
-                single_example(
-                    "Business Plan",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::ZedBusiness), false),
-                ),
-                single_example(
-                    "VIP Plan",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::ZedVip), false),
-                ),
-                single_example(
-                    "Student Plan",
-                    onboarding(SignInStatus::SignedIn, Some(Plan::ZedStudent), false),
                 ),
             ])
             .into_any_element()

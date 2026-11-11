@@ -48,6 +48,18 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   место буквы Z). Логотип одноцветный, тень — `fill-opacity="0.45"`; координаты
   пересчитываются в нужную область, а не масштабируются `transform`, чтобы не менялась
   толщина обводок. При слиянии с Zed для этих файлов оставлять версию форка.
+- Тексты интерфейса, где «Zed» означало само приложение, — «Iridium»: описания
+  настроек, «… is built-in to Iridium!» в каталоге расширений, онбординг (доверие к
+  проектам), сообщения о запуске, вопросы о скачивании и офлайн-режим. Не менялись
+  (это сервисы и ресурсы Zed или совместимость): Zed AI, Zed Agent, сервер zed.dev,
+  пункты Help «Zed Repository» / «Zed Twitter», раскладка клавиш «Zed», тема иконок
+  «Zed (Default)», HTTP `User-Agent: Zed/…` (по нему zed.dev отдаёт расширения),
+  тексты про CLI `zed`.
+- Удалено всё про Delta (продукт команды Zed): карточка анонса «Introducing Delta»
+  (`auto_update_ui`), компонент `DeltaIllustration` и картинки `delta_*.svg`.
+- Удалены тарифы zed.dev: экраны «Welcome to Zed Pro/Business/VIP/Student/Trial»
+  (`ai_onboarding`), штампы `*_stamp.svg` и их `VectorName`, описания платных тарифов
+  в `plan_definitions.rs`.
 - Заголовки «Welcome to Iridium» / «Welcome back to Iridium» (`welcome.rs`,
   `onboarding.rs`); логотип рядом с ними — цвета фона редактора, чуть темнее (на почти чёрном фоне —
   светлее), как «тиснение» на приветствии VS Code (`welcome::logo_watermark_color`).
@@ -58,9 +70,12 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   (`script/bundle-*`, `install-linux`), имя `.desktop`-файла, flatpak-манифест
   (CLI проверяет `FLATPAK_ID` на `dev.zed.Zed`).
 - Схема ссылок `zed://`, папка проекта `.zed/` (вместе с совместимостью — решить).
-- В штампах тарифов справа точками написано «ZED» (штампы видны только с аккаунтом
-  zed.dev, которого в форке нет); подзаголовок онбординга «The editor for what's next»
-  — слоган Zed.
+- Подзаголовок онбординга «The editor for what's next» — слоган Zed.
+- Остатки Zed AI и тарифов, недостижимые без входа в аккаунт: карточка входа и
+  «Free plan» в онбординге агента (`ai_onboarding`), предложение после пробного
+  периода (`agent_ui/src/ui/end_trial_upsell.rs`), баннер молодого аккаунта,
+  меню предсказаний «Upgrade to Zed Pro» (`edit_prediction_button.rs`), провайдер
+  `language_models/src/provider/cloud.rs`. Убирать вместе с пересмотром панели агента.
 - Тексты интерфейса с «Zed» (пункты меню Help: «Zed Repository» и т. п., онбординг,
   описания настроек, сообщения об ошибках), документация.
 
@@ -201,7 +216,12 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   git graph (аватар, автор, дата, копирование email и SHA, View on GitHub,
   сворачиваемое сообщение, список файлов Tree/Flat), справа выбранный файл целиком
   без заголовка, с «весь файл / только изменения», Unified/Split и «Open File».
-- Открывается вместо `CommitView` отовсюду (кроме stash). Буфер и дифф строятся
+- Открывается вместо `CommitView` отовсюду (кроме stash).
+- Описание коммита раскрыто или свёрнуто при открытии по настройке
+  `git.commit_view.expand_description` (в форке по умолчанию `true`); настройка
+  `git.commit_view.expand_files` не нужна (файл показывается один) и скрыта из окна
+  настроек. «Show Full File by Default» (`git.file_diff.show_full_file`) — общий для
+  всех диффов режим «весь файл / только изменения». Буфер и дифф строятся
   только для выбранного файла.
 
 ## Приватность и сеть
@@ -239,27 +259,34 @@ Iridium — форк редактора [Zed](https://github.com/zed-industries/
   `agent_server_store.rs` и `agent_registry_store.rs` (агенты),
   `extension_host.rs` и `wasm_host/wit/since_v0_8_0.rs` (расширения),
   `prettier_store.rs`, `dap/src/adapters.rs`.
+- **Автообновление Zed отключено**: `ReleaseChannel::poll_for_updates` всегда `false`
+  (сервер обновлений Zed поставил бы Zed поверх Iridium, а своего у Iridium нет),
+  `"auto_update": false`, нет пункта «Check for Updates» и раздела «Auto Update» в
+  настройках. Серверы Zed, без которых не обойтись, работают как раньше: каталог и
+  обновления расширений (api.zed.dev), скачивание сервера для удалённой разработки
+  по SSH, реестр агентов.
 - Проверка: `timeout 90 strace -f -e trace=execve,connect -o /tmp/net.txt target/debug/zed .`
   и посчитать соединения на `:443`, кроме `127.0.0.*` (с настройками по умолчанию
   ожидается только `api.zed.dev/extensions/updates` при запуске).
 
 ## Планы и что проверить
 
-- **Автообновление Zed в релизных сборках (важно).** `"auto_update": true`, а канал
-  Stable (и Preview/Nightly) проверяет обновления на zed.dev
-  (`ReleaseChannel::poll_for_updates`, крейт `auto_update`) — релизная сборка Iridium
-  скачала бы и установила обычный Zed. В dev-сборке не проявляется (Dev не проверяет).
-  Отключить, пока у Iridium нет своего сервера обновлений. Заодно не появится карточка
-  анонса Zed (`AnnouncementToastNotification` про Delta), которая показывается только
-  после такого обновления.
-
-- **Настройки вида коммита из Zed не действуют на просмотр коммита форка.**
-  В Zed 1.29 появились `git.commit_view.expand_description` (раскрывать ли описание
-  коммита) и `git.commit_view.expand_files` (раскрывать ли файлы), раздел
-  Settings → Version Control → Git Commit View. Они работают для `CommitView` Zed, а
-  форк открывает свой `CommitFilesView`, где описание сейчас всегда раскрыто
-  (`message_collapsed: false`), а файл показывается один. Решить: подключить
-  `expand_description` к нашему виду, а `expand_files` скрыть (или оставить как есть).
+- **Палитра в title bar (Command Center, как в VS Code).** В центре title bar поле с
+  названием проекта и лупой; клик или **Shift Shift** открывает единую палитру
+  (запросы пользователей Zed: #15896, 124 👍; палитра недавних файлов #4663, 120 👍).
+  Старые палитры (Ctrl+P — файлы, Ctrl+Shift+P — команды и т. д.) остаются как есть.
+  Что продумать:
+  - режимы по префиксу, как в VS Code: без префикса — файлы (сначала недавние),
+    `>` — команды, `@` — символы файла, `#` — символы проекта, `:` — строка,
+    `?` — подсказка по префиксам; переключение режима на лету при вводе префикса;
+  - реализация: свой picker-модал, который по префиксу передаёт запрос существующим
+    (`file_finder`, `command_palette`, `outline`, `project_symbols`, `go_to_line`),
+    или переключается на них с остатком запроса — выяснить, что проще и устойчивее
+    к слияниям с Zed;
+  - привязка `"shift shift"` (Zed поддерживает такие привязки, см.
+    `assets/keymaps/linux/jetbrains.json`), без конфликта с обычным вводом;
+  - вид поля в title bar: ширина, поведение в узком окне, место рядом с меню и
+    кнопками раскладки; в Linux/Windows title bar рисует Iridium сам.
 
 ## Заметки для разработки
 

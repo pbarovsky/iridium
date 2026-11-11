@@ -235,7 +235,9 @@ impl CommitFilesView {
             diff_stats,
             is_shallow_boundary: commit_diff.is_shallow_boundary,
             message,
-            message_collapsed: false,
+            message_collapsed: !EditorSettings::get_global(cx)
+                .commit_view
+                .expand_description,
             message_scroll_handle: ScrollHandle::new(),
             remote,
             view_mode: ChangedFilesViewMode::Tree,
