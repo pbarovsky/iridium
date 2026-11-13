@@ -485,12 +485,7 @@ impl Render for WelcomePage {
                                     .color(logo_watermark_color(cx)),
                             )
                             .child(
-                                v_flex().child(Headline::new(welcome_label)).child(
-                                    Label::new("The editor for what's next")
-                                        .size(LabelSize::Small)
-                                        .color(Color::Muted)
-                                        .italic(),
-                                ),
+                                v_flex().child(Headline::new(welcome_label)),
                             ),
                     )
                     .child(first_section.render(Default::default(), &self.focus_handle))

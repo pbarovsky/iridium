@@ -337,12 +337,6 @@ impl Render for Onboarding {
                                                     .child(
                                                         Headline::new("Welcome to Iridium")
                                                             .size(HeadlineSize::Small),
-                                                    )
-                                                    .child(
-                                                        Label::new("The editor for what's next")
-                                                            .color(Color::Muted)
-                                                            .size(LabelSize::Small)
-                                                            .italic(),
                                                     ),
                                             ),
                                     )

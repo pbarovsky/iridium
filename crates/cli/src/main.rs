@@ -998,7 +998,7 @@ mod flatpak {
         if !invocation_args.iter().any(|arg| arg == "--zed") {
             // Positional paths consume all following arguments, so launcher options must precede them.
             args.push("--zed".into());
-            args.push(flatpak_dir.join("libexec").join("zed-editor").into());
+            args.push(flatpak_dir.join("libexec").join("iridium-editor").into());
         }
 
         args.extend_from_slice(invocation_args);
@@ -1033,7 +1033,7 @@ mod flatpak {
                 )
                 .into(),
             );
-            args.push(flatpak_dir.join("bin").join("zed").into());
+            args.push(flatpak_dir.join("bin").join("iridium").into());
 
             let invocation_args = env::args_os().skip(1).collect::<Vec<_>>();
             args.extend(restart_cli_args(&flatpak_dir, &invocation_args));
@@ -1046,11 +1046,11 @@ mod flatpak {
 
     pub fn set_bin_if_no_escape(mut args: super::Args) -> super::Args {
         if env::var(NO_ESCAPE_ENV_NAME).is_ok()
-            && env::var("FLATPAK_ID").is_ok_and(|id| id.starts_with("dev.zed.Zed"))
+            && env::var("FLATPAK_ID").is_ok_and(|id| id.starts_with("io.github.pbarovsky.Iridium"))
             && args.zed.is_none()
         {
-            args.zed = Some("/app/libexec/zed-editor".into());
-            unsafe { env::set_var("ZED_UPDATE_EXPLANATION", "Please use flatpak to update zed") };
+            args.zed = Some("/app/libexec/iridium-editor".into());
+            unsafe { env::set_var("ZED_UPDATE_EXPLANATION", "Please use flatpak to update Iridium") };
         }
         args
     }
@@ -1061,7 +1061,7 @@ mod flatpak {
         }
 
         if let Ok(flatpak_id) = env::var("FLATPAK_ID") {
-            if !flatpak_id.starts_with("dev.zed.Zed") {
+            if !flatpak_id.starts_with("io.github.pbarovsky.Iridium") {
                 return None;
             }
 
@@ -1107,7 +1107,7 @@ mod flatpak {
                 crate::Args::try_parse_from(std::iter::once(OsString::from("zed")).chain(args))
                     .unwrap();
 
-            assert_eq!(parsed.zed, Some(flatpak_dir.join("libexec/zed-editor")));
+            assert_eq!(parsed.zed, Some(flatpak_dir.join("libexec/iridium-editor")));
             assert_eq!(parsed.paths_with_position, ["project"]);
 
             let invocation_args = ["--zed".into(), "/custom/zed-editor".into()];

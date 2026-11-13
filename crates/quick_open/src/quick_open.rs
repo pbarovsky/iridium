@@ -147,6 +147,7 @@ impl QuickOpen {
                     .map(|editor| editor.update(cx, |editor, cx| editor.scroll_position(cx))),
                 matches: Vec::new(),
                 separator_after: None,
+                section_label: None,
                 selected_index: 0,
                 cancel_flag: Arc::new(AtomicBool::new(false)),
             };
@@ -191,6 +192,7 @@ fn load_symbols(
                 .into_iter()
                 .filter_map(|item: OutlineItem<language::Anchor>| {
                     Some(Symbol {
+                        kind: symbol_kind_from_text(&item.text),
                         name: item.text.into(),
                         depth: item.depth,
                         position: multibuffer.anchor_in_buffer(item.range.start)?,
@@ -254,6 +256,8 @@ struct Command {
 }
 
 struct Symbol {
+    /// Guessed from the outline item's text, which outlines don't classify.
+    kind: Option<language::SymbolKind>,
     name: SharedString,
     depth: usize,
     position: Anchor,
@@ -385,6 +389,9 @@ struct QuickOpenDelegate {
     /// symbols without picking one.
     prev_scroll_position: Option<gpui::Point<editor::scroll::ScrollOffset>>,
     matches: Vec<Match>,
+    /// A label at the right of one row, naming the section it starts, like
+    /// VS Code's "recently opened" and "file results".
+    section_label: Option<(usize, &'static str)>,
     /// Draws a line between the help entries and the recent files.
     separator_after: Option<usize>,
     selected_index: usize,
@@ -466,6 +473,7 @@ impl QuickOpenDelegate {
             picker
                 .update(cx, |picker, cx| {
                     let delegate = &mut picker.delegate;
+                    delegate.section_label = (!matches.is_empty()).then_some((0, "file results"));
                     delegate.matches = matches
                         .into_iter()
                         .map(|path_match| {
@@ -618,6 +626,29 @@ impl QuickOpenDelegate {
         });
     }
 
+    /// Shows line `row` in the editor while typing `:`, like Zed's go to line.
+    fn preview_line(&self, row: u32, cx: &mut App) {
+        let Some(editor) = &self.active_editor else {
+            return;
+        };
+        editor.update(cx, |editor, cx| {
+            let snapshot = editor.buffer().read(cx).snapshot(cx);
+            let start =
+                snapshot.clip_point(Point::new(row.saturating_sub(1), 0), language::Bias::Left);
+            let range = snapshot.anchor_before(start)..snapshot.anchor_before(start);
+            editor.highlight_rows::<PreviewHighlight>(
+                range,
+                |cx| cx.theme().colors().editor_highlighted_line_background,
+                editor::RowHighlightOptions {
+                    autoscroll: true,
+                    ..Default::default()
+                },
+                cx,
+            );
+            editor.request_autoscroll(Autoscroll::center(), cx);
+        });
+    }
+
     fn clear_preview(&self, cx: &mut App) {
         if let Some(editor) = &self.active_editor {
             editor.update(cx, |editor, _| {
@@ -693,12 +724,12 @@ impl PickerDelegate for QuickOpenDelegate {
         self.selected_index = 0;
         self.latest_query = query.to_string();
         self.recent_command_rows = 0;
-        if mode != Mode::FileSymbols {
-            self.clear_preview(cx);
-        }
+        // `@` and `:` preview in the editor; other modes leave it as it was.
+        self.clear_preview(cx);
         self.file_line = None;
         let (file_query, file_line) = parse_file_query(query);
         self.separator_after = None;
+        self.section_label = None;
         self.matches = match mode {
             Mode::Files if query.is_empty() => {
                 // Like VS Code's command center: the modes first, then the
@@ -706,6 +737,7 @@ impl PickerDelegate for QuickOpenDelegate {
                 let recent = self.recent_file_matches(cx);
                 if !recent.is_empty() {
                     self.separator_after = Some(HELP.len() - 1);
+                    self.section_label = Some((HELP.len(), "recently opened"));
                 }
                 (0..HELP.len()).map(Match::Help).chain(recent).collect()
             }
@@ -750,7 +782,10 @@ impl PickerDelegate for QuickOpenDelegate {
                     .next()
                     .and_then(|column| column.trim().parse::<u32>().ok());
                 match row {
-                    Some(row) => vec![Match::Line { row, column }],
+                    Some(row) => {
+                        self.preview_line(row, cx);
+                        vec![Match::Line { row, column }]
+                    }
                     None => vec![Match::Hint("Type a line number, or line:column".into())],
                 }
             }
@@ -853,6 +888,7 @@ impl PickerDelegate for QuickOpenDelegate {
                     return;
                 };
                 let (row, column) = (*row, *column);
+                self.clear_preview(cx);
                 self.dismiss(cx);
                 go_to_line(&editor, row, column, window, cx);
             }
@@ -906,6 +942,7 @@ impl PickerDelegate for QuickOpenDelegate {
                 )
                 .child(
                     h_flex()
+                        .w_full()
                         .gap_2()
                         .min_w_0()
                         .child(HighlightedLabel::new(name.clone(), name_positions.clone()))
@@ -914,7 +951,13 @@ impl PickerDelegate for QuickOpenDelegate {
                                 .size(LabelSize::Small)
                                 .color(Color::Muted)
                                 .truncate(),
-                        ),
+                        )
+                        .child(div().flex_1())
+                        .children(self.section_label.filter(|(row, _)| *row == ix).map(
+                            |(_, label)| {
+                                Label::new(label).size(LabelSize::Small).color(Color::Muted)
+                            },
+                        )),
                 ),
             Match::Command(command_match) => {
                 let command = self.commands.get(command_match.candidate_id)?;
@@ -946,14 +989,15 @@ impl PickerDelegate for QuickOpenDelegate {
             }
             Match::Symbol(symbol_match) => {
                 let symbol = self.symbols.get(symbol_match.candidate_id)?;
-                item.child(
-                    h_flex()
-                        .pl(rems(symbol.depth as f32))
-                        .child(HighlightedLabel::new(
-                            symbol.name.clone(),
-                            symbol_match.positions.clone(),
-                        )),
-                )
+                item.start_slot::<Icon>(symbol.kind.map(|kind| symbol_icon(kind, cx)))
+                    .child(
+                        h_flex()
+                            .pl(rems(symbol.depth as f32))
+                            .child(HighlightedLabel::new(
+                                symbol.name.clone(),
+                                symbol_match.positions.clone(),
+                            )),
+                    )
             }
             Match::ProjectSymbol(symbol_match) => {
                 let symbol = self.project_symbols.get(symbol_match.candidate_id)?;
@@ -965,7 +1009,7 @@ impl PickerDelegate for QuickOpenDelegate {
                         abs_path.to_string_lossy().to_string().into()
                     }
                 };
-                item.child(
+                item.start_slot(symbol_icon(symbol.kind, cx)).child(
                     h_flex()
                         .gap_2()
                         .min_w_0()
@@ -1113,4 +1157,66 @@ fn shortcut_for(action: &dyn Action, cx: &App) -> Option<ui::KeyBinding> {
         binding.keystrokes().into(),
         false,
     ))
+}
+
+/// The Codicon for a kind of symbol, colored like that kind of token in the
+/// theme's syntax highlighting, the way VS Code colors its symbol icons.
+fn symbol_icon(kind: language::SymbolKind, cx: &App) -> Icon {
+    use language::SymbolKind as Kind;
+    let (icon, token) = match kind {
+        Kind::Function | Kind::Method | Kind::Constructor => (IconName::SymbolMethod, "function"),
+        Kind::Class => (IconName::SymbolClass, "type"),
+        Kind::Struct => (IconName::SymbolStructure, "type"),
+        Kind::Interface => (IconName::SymbolInterface, "type"),
+        Kind::Enum => (IconName::SymbolEnum, "type"),
+        Kind::EnumMember => (IconName::SymbolEnumMember, "constant"),
+        Kind::Constant => (IconName::SymbolConstant, "constant"),
+        Kind::Field => (IconName::SymbolField, "property"),
+        Kind::Property => (IconName::SymbolProperty, "property"),
+        Kind::Variable => (IconName::SymbolVariable, "variable"),
+        Kind::Key => (IconName::SymbolKey, "property"),
+        Kind::Event => (IconName::SymbolEvent, "function"),
+        Kind::Operator => (IconName::SymbolOperator, "operator"),
+        Kind::TypeParameter => (IconName::SymbolParameter, "type"),
+        Kind::File | Kind::Module | Kind::Namespace | Kind::Package => {
+            (IconName::SymbolNamespace, "namespace")
+        }
+        _ => (IconName::SymbolMisc, ""),
+    };
+    let color = cx
+        .theme()
+        .syntax()
+        .style_for_name(token)
+        .and_then(|style| style.color)
+        .map_or(Color::Muted, Color::Custom);
+    Icon::new(icon).size(IconSize::Small).color(color)
+}
+
+/// What kind of symbol an outline item is, from the keyword its text starts
+/// with (`fn`, `struct`, `class`, `def`…), since outlines don't say.
+fn symbol_kind_from_text(text: &str) -> Option<language::SymbolKind> {
+    use language::SymbolKind as Kind;
+    let keywords = text
+        .split_whitespace()
+        .take_while(|word| !word.contains('(') && !word.contains('<'));
+    for keyword in keywords {
+        let kind = match keyword {
+            "fn" | "func" | "function" | "def" | "fun" | "method" => Kind::Function,
+            "struct" | "record" => Kind::Struct,
+            "class" | "impl" | "object" => Kind::Class,
+            "enum" => Kind::Enum,
+            "trait" | "interface" | "protocol" => Kind::Interface,
+            "type" | "typedef" => Kind::TypeParameter,
+            "mod" | "module" | "namespace" | "package" => Kind::Module,
+            "const" | "static" => Kind::Constant,
+            "let" | "var" | "val" => Kind::Variable,
+            "macro_rules!" | "macro" => Kind::Function,
+            // Modifiers before the keyword, e.g. `pub async fn`.
+            "pub" | "pub(crate)" | "pub(super)" | "async" | "unsafe" | "export" | "default"
+            | "abstract" | "public" | "private" | "protected" | "extern" | "final" => continue,
+            _ => return None,
+        };
+        return Some(kind);
+    }
+    None
 }

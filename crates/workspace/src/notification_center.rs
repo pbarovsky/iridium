@@ -10,7 +10,9 @@ use ui::{PopoverMenu, Tooltip, prelude::*};
 
 use crate::{
     ItemHandle, StatusItemView, Workspace,
-    notifications::{NotificationId, dismiss_app_notification},
+    notifications::{
+        NotificationId, dismiss_app_notification, do_not_disturb, toggle_do_not_disturb,
+    },
     status_bar::HideStatusItem,
 };
 
@@ -49,7 +51,9 @@ impl Render for NotificationCenterButton {
             .trigger_with_tooltip(
                 IconButton::new(
                     "notification-center-button",
-                    if count > 0 {
+                    if do_not_disturb() {
+                        IconName::NotificationBellOff
+                    } else if count > 0 {
                         IconName::NotificationBellDot
                     } else {
                         IconName::NotificationBell
@@ -147,9 +151,43 @@ impl Render for NotificationCenter {
                     .border_b_1()
                     .border_color(cx.theme().colors().border_variant)
                     .child(
-                        Label::new("Notifications")
-                            .size(LabelSize::Small)
-                            .color(Color::Muted),
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                Label::new("Notifications")
+                                    .size(LabelSize::Small)
+                                    .color(Color::Muted),
+                            )
+                            .child(
+                                IconButton::new(
+                                    "toggle-do-not-disturb",
+                                    if do_not_disturb() {
+                                        IconName::NotificationsMuted
+                                    } else {
+                                        IconName::Notifications
+                                    },
+                                )
+                                .icon_size(IconSize::Small)
+                                .tooltip(Tooltip::text(if do_not_disturb() {
+                                    "Turn Off Do Not Disturb"
+                                } else {
+                                    "Do Not Disturb"
+                                }))
+                                .on_click(cx.listener(
+                                    |this, _, _, cx| {
+                                        let enabled = toggle_do_not_disturb();
+                                        this.workspace
+                                            .update(cx, |workspace, cx| {
+                                                if enabled {
+                                                    workspace.close_all_notifications(cx);
+                                                }
+                                                cx.notify();
+                                            })
+                                            .ok();
+                                        cx.notify();
+                                    },
+                                )),
+                            ),
                     )
                     .child(
                         IconButton::new("clear-all-notifications", IconName::ListX)
