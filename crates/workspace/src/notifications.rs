@@ -14,10 +14,7 @@ use settings::Settings;
 use theme_settings::ThemeSettings;
 
 use std::ops::Deref;
-use std::sync::{
-    Arc, LazyLock,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::{Arc, LazyLock};
 use std::{any::TypeId, time::Duration};
 use ui::{CopyButton, Tooltip, prelude::*};
 use util::ResultExt;
@@ -48,16 +45,6 @@ pub fn mark_notification_answered(notification: gpui::EntityId) {
 /// list rather than as floating cards.
 static NOTIFICATIONS_IN_CENTER: LazyLock<Mutex<collections::HashSet<gpui::EntityId>>> =
     LazyLock::new(Default::default);
-
-static DO_NOT_DISTURB: AtomicBool = AtomicBool::new(false);
-
-pub fn do_not_disturb() -> bool {
-    DO_NOT_DISTURB.load(Ordering::Relaxed)
-}
-
-pub fn toggle_do_not_disturb() -> bool {
-    !DO_NOT_DISTURB.fetch_xor(true, Ordering::Relaxed)
-}
 
 pub fn is_in_notification_center(notification: gpui::EntityId) -> bool {
     NOTIFICATIONS_IN_CENTER.lock().contains(&notification)
@@ -221,7 +208,7 @@ impl Workspace {
         self.notifications
             .push((id.clone(), build_notification(cx)));
         cx.notify();
-        if do_not_disturb() {
+        if crate::notification_center::do_not_disturb(cx) {
             self.close_notification(id, cx);
         }
     }
@@ -320,12 +307,9 @@ impl Workspace {
             })
         });
 
-        if do_not_disturb() {
-            self.close_notification(&toast.id, cx);
-            return;
-        }
-
-        if toast.autohide {
+        // Under "Do Not Disturb" the toast went straight to the notification
+        // center, where it stays.
+        if toast.autohide && !crate::notification_center::do_not_disturb(cx) {
             cx.spawn(async move |workspace, cx| {
                 cx.background_executor()
                     .timer(Duration::from_millis(5000))

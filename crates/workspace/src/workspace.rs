@@ -1056,6 +1056,7 @@ pub fn init(app_state: Arc<AppState>, cx: &mut App) {
     theme_preview::init(cx);
     toast_layer::init(cx);
     history_manager::init(app_state.fs.clone(), cx);
+    notification_center::init(cx);
 
     cx.on_app_quit(flush_windows_serialization_on_quit).detach();
 

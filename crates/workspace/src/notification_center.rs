@@ -3,29 +3,76 @@
 //! or discarded.
 
 use gpui::{
-    Anchor, App, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-    ParentElement, Render, Styled, Subscription, WeakEntity, Window,
+    Anchor, App, AppContext as _, Context, DismissEvent, Entity, EventEmitter, FocusHandle,
+    Focusable, Global, IntoElement, ParentElement, Render, Styled, Subscription, WeakEntity,
+    Window,
 };
 use ui::{PopoverMenu, Tooltip, prelude::*};
+use util::ResultExt as _;
 
 use crate::{
     ItemHandle, StatusItemView, Workspace,
-    notifications::{
-        NotificationId, dismiss_app_notification, do_not_disturb, toggle_do_not_disturb,
-    },
+    notifications::{NotificationId, dismiss_app_notification},
     status_bar::HideStatusItem,
 };
 
+const DO_NOT_DISTURB_KEY: &str = "notification_center_do_not_disturb";
+
+/// "Do Not Disturb": notifications go straight to the notification center
+/// instead of showing over the workspace. Shared by all windows and kept
+/// across restarts.
+#[derive(Default)]
+struct DoNotDisturb(bool);
+
+impl Global for DoNotDisturb {}
+
+pub fn init(cx: &mut App) {
+    let enabled = db::kvp::KeyValueStore::global(cx)
+        .read_kvp(DO_NOT_DISTURB_KEY)
+        .log_err()
+        .flatten()
+        .is_some_and(|value| value == "true");
+    cx.set_global(DoNotDisturb(enabled));
+}
+
+pub fn do_not_disturb(cx: &App) -> bool {
+    cx.try_global::<DoNotDisturb>()
+        .is_some_and(|do_not_disturb| do_not_disturb.0)
+}
+
+pub fn set_do_not_disturb(enabled: bool, cx: &mut App) {
+    cx.set_global(DoNotDisturb(enabled));
+    let kvp = db::kvp::KeyValueStore::global(cx);
+    cx.background_spawn(async move {
+        kvp.write_kvp(DO_NOT_DISTURB_KEY.to_string(), enabled.to_string())
+            .await
+            .log_err();
+    })
+    .detach();
+}
+
 pub struct NotificationCenterButton {
     workspace: WeakEntity<Workspace>,
-    _workspace_subscription: Subscription,
+    _subscriptions: [Subscription; 2],
 }
 
 impl NotificationCenterButton {
     pub fn new(workspace: &Entity<Workspace>, cx: &mut Context<Self>) -> Self {
         Self {
             workspace: workspace.downgrade(),
-            _workspace_subscription: cx.observe(workspace, |_, _, cx| cx.notify()),
+            _subscriptions: [
+                cx.observe(workspace, |_, _, cx| cx.notify()),
+                // Each window's button clears its own workspace, so turning
+                // the mode on in one window clears the others too.
+                cx.observe_global::<DoNotDisturb>(|this, cx| {
+                    if do_not_disturb(cx) {
+                        this.workspace
+                            .update(cx, |workspace, cx| workspace.close_all_notifications(cx))
+                            .ok();
+                    }
+                    cx.notify();
+                }),
+            ],
         }
     }
 }
@@ -36,10 +83,16 @@ impl Render for NotificationCenterButton {
             .workspace
             .read_with(cx, |workspace, _| workspace.closed_notifications().len())
             .unwrap_or(0);
+        let do_not_disturb = do_not_disturb(cx);
         let tooltip = match count {
             0 => "No Notifications".to_string(),
             1 => "1 Notification".to_string(),
             count => format!("{count} Notifications"),
+        };
+        let tooltip = if do_not_disturb {
+            format!("{tooltip} (Do Not Disturb)")
+        } else {
+            tooltip
         };
         let workspace = self.workspace.clone();
         PopoverMenu::new("notification-center")
@@ -51,16 +104,14 @@ impl Render for NotificationCenterButton {
             .trigger_with_tooltip(
                 IconButton::new(
                     "notification-center-button",
-                    if do_not_disturb() {
-                        IconName::NotificationBellOff
-                    } else if count > 0 {
-                        IconName::NotificationBellDot
-                    } else {
-                        IconName::NotificationBell
+                    match (do_not_disturb, count > 0) {
+                        (true, true) => IconName::NotificationBellOffDot,
+                        (true, false) => IconName::NotificationBellOff,
+                        (false, true) => IconName::NotificationBellDot,
+                        (false, false) => IconName::NotificationBell,
                     },
                 )
-                .icon_size(IconSize::Small)
-                .when(count > 0, |button| button.icon_color(Color::Accent)),
+                .icon_size(IconSize::Small),
                 Tooltip::text(tooltip),
             )
     }
@@ -83,18 +134,21 @@ impl StatusItemView for NotificationCenterButton {
 struct NotificationCenter {
     workspace: WeakEntity<Workspace>,
     focus_handle: FocusHandle,
-    _workspace_subscription: Option<Subscription>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl NotificationCenter {
     fn new(workspace: WeakEntity<Workspace>, _: &mut Window, cx: &mut Context<Self>) -> Self {
-        let subscription = workspace
-            .upgrade()
-            .map(|workspace| cx.observe(&workspace, |_, _, cx| cx.notify()));
+        let mut subscriptions = vec![cx.observe_global::<DoNotDisturb>(|_, cx| cx.notify())];
+        subscriptions.extend(
+            workspace
+                .upgrade()
+                .map(|workspace| cx.observe(&workspace, |_, _, cx| cx.notify())),
+        );
         Self {
             workspace,
             focus_handle: cx.focus_handle(),
-            _workspace_subscription: subscription,
+            _subscriptions: subscriptions,
         }
     }
 
@@ -133,6 +187,7 @@ impl Render for NotificationCenter {
             })
             .unwrap_or_default();
         let is_empty = notifications.is_empty();
+        let do_not_disturb = do_not_disturb(cx);
 
         v_flex()
             .key_context("NotificationCenter")
@@ -161,32 +216,22 @@ impl Render for NotificationCenter {
                             .child(
                                 IconButton::new(
                                     "toggle-do-not-disturb",
-                                    if do_not_disturb() {
+                                    if do_not_disturb {
                                         IconName::NotificationsMuted
                                     } else {
                                         IconName::Notifications
                                     },
                                 )
                                 .icon_size(IconSize::Small)
-                                .tooltip(Tooltip::text(if do_not_disturb() {
+                                .toggle_state(do_not_disturb)
+                                .tooltip(Tooltip::text(if do_not_disturb {
                                     "Turn Off Do Not Disturb"
                                 } else {
                                     "Do Not Disturb"
                                 }))
-                                .on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        let enabled = toggle_do_not_disturb();
-                                        this.workspace
-                                            .update(cx, |workspace, cx| {
-                                                if enabled {
-                                                    workspace.close_all_notifications(cx);
-                                                }
-                                                cx.notify();
-                                            })
-                                            .ok();
-                                        cx.notify();
-                                    },
-                                )),
+                                .on_click(move |_, _, cx| {
+                                    set_do_not_disturb(!do_not_disturb, cx)
+                                }),
                             ),
                     )
                     .child(

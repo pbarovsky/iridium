@@ -219,6 +219,7 @@ pub enum IconName {
     NotificationBell,
     NotificationBellDot,
     NotificationBellOff,
+    NotificationBellOffDot,
     Notifications,
     NotificationsMuted,
     OnCall,

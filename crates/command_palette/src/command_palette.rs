@@ -873,7 +873,7 @@ pub fn recently_used_command_names(cx: &App) -> Vec<SharedString> {
     let Ok(mut commands) = CommandPaletteDB::global(cx).list_commands_used() else {
         return Vec::new();
     };
-    commands.sort_by(|a, b| b.last_invoked.cmp(&a.last_invoked));
+    commands.sort_by_key(|command| std::cmp::Reverse(command.last_invoked));
     commands
         .into_iter()
         .map(|command| command.command_name.into())

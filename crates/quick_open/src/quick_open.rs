@@ -4,6 +4,7 @@
 //! a line (`:`). Erasing the prefix goes back to files.
 
 use std::{
+    collections::HashMap,
     path::Path,
     sync::{
         Arc,
@@ -24,7 +25,7 @@ use gpui::{
     Action, App, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable, Render, Task,
     WeakEntity, Window,
 };
-use language::{OutlineItem, Point};
+use language::{OutlineItem, Point, ToPoint as _};
 use picker::{Picker, PickerDelegate};
 use project::{PathMatchCandidateSet, Project, ProjectPath, WorktreeId};
 use settings::{RegisterSetting, Settings};
@@ -127,6 +128,7 @@ impl QuickOpen {
             .collect();
         commands.sort_by(|a, b| a.name.cmp(&b.name));
 
+        let project_for_symbols = project.clone();
         workspace.toggle_modal(window, cx, move |window, cx| {
             let delegate = QuickOpenDelegate {
                 quick_open: cx.entity().downgrade(),
@@ -162,7 +164,7 @@ impl QuickOpen {
                 picker
             });
             if let Some(editor) = active_editor {
-                load_symbols(&picker, &editor, window, cx);
+                load_symbols(&picker, &editor, &project_for_symbols, window, cx);
             }
 
             Self { picker }
@@ -171,28 +173,41 @@ impl QuickOpen {
     }
 }
 
-/// Loads the active file's symbols for `@`, which can take a moment.
+/// Loads the active file's symbols for `@`, which can take a moment. The
+/// outline doesn't say what kind of symbol each item is, so the kinds are
+/// guessed from its text first, then taken from the language server's document
+/// symbols when it answers.
 fn load_symbols(
     picker: &Entity<Picker<QuickOpenDelegate>>,
     editor: &Entity<Editor>,
+    project: &Entity<Project>,
     window: &mut Window,
     cx: &mut App,
 ) {
     let multibuffer = editor.read(cx).buffer().read(cx).snapshot(cx);
-    let Some(buffer) = multibuffer.as_singleton() else {
+    let Some(buffer) = editor.read(cx).buffer().read(cx).as_singleton() else {
         return;
     };
-    let buffer_id = buffer.remote_id();
+    let buffer_snapshot = buffer.read(cx).snapshot();
+    let buffer_id = buffer_snapshot.remote_id();
     let items = editor.update(cx, |editor, cx| editor.buffer_outline_items(buffer_id, cx));
+    let lsp_symbols = project.update(cx, |project, cx| project.document_symbols(&buffer, cx));
     let picker = picker.downgrade();
     window
         .spawn(cx, async move |cx| {
+            let mut parent_kinds: Vec<Option<language::SymbolKind>> = Vec::new();
             let symbols = items
                 .await
                 .into_iter()
                 .filter_map(|item: OutlineItem<language::Anchor>| {
+                    parent_kinds.resize(item.depth, None);
+                    let parent_kind = parent_kinds.last().copied().flatten();
+                    let kind = symbol_kind_from_text(&item.text)
+                        .or_else(|| member_kind(parent_kind));
+                    parent_kinds.push(kind);
                     Some(Symbol {
-                        kind: symbol_kind_from_text(&item.text),
+                        kind,
+                        name_row: item.selection_range.start.to_point(&buffer_snapshot).row,
                         name: item.text.into(),
                         depth: item.depth,
                         position: multibuffer.anchor_in_buffer(item.range.start)?,
@@ -200,16 +215,65 @@ fn load_symbols(
                     })
                 })
                 .collect();
+            let update_picker = |picker: &mut Picker<QuickOpenDelegate>,
+                                 window: &mut Window,
+                                 cx: &mut Context<Picker<QuickOpenDelegate>>| {
+                if Mode::parse(&picker.query(cx)).0 == Mode::FileSymbols {
+                    picker.refresh(window, cx);
+                }
+            };
             picker
                 .update_in(cx, |picker, window, cx| {
                     picker.delegate.symbols = symbols;
-                    if Mode::parse(&picker.query(cx)).0 == Mode::FileSymbols {
-                        picker.refresh(window, cx);
+                    update_picker(picker, window, cx);
+                })
+                .ok();
+
+            let mut lsp_kinds = HashMap::default();
+            collect_symbol_kinds(
+                &lsp_symbols.await.log_err().unwrap_or_default(),
+                &mut lsp_kinds,
+            );
+            if lsp_kinds.is_empty() {
+                return;
+            }
+            picker
+                .update_in(cx, |picker, window, cx| {
+                    for symbol in &mut picker.delegate.symbols {
+                        if let Some(kind) = lsp_kinds.get(&symbol.name_row) {
+                            symbol.kind = Some(*kind);
+                        }
                     }
+                    update_picker(picker, window, cx);
                 })
                 .ok();
         })
         .detach();
+}
+
+/// The kind of each document symbol by the row of its name, which is where
+/// outline items put their selection too.
+fn collect_symbol_kinds(
+    symbols: &[project::DocumentSymbol],
+    kinds: &mut HashMap<u32, language::SymbolKind>,
+) {
+    for symbol in symbols {
+        kinds
+            .entry(symbol.selection_range.start.0.row)
+            .or_insert(symbol.kind);
+        collect_symbol_kinds(&symbol.children, kinds);
+    }
+}
+
+/// What an unkeyworded item inside a struct or an enum is: a field or a
+/// variant.
+fn member_kind(parent: Option<language::SymbolKind>) -> Option<language::SymbolKind> {
+    use language::SymbolKind as Kind;
+    match parent? {
+        Kind::Struct | Kind::Class | Kind::Interface => Some(Kind::Field),
+        Kind::Enum => Some(Kind::EnumMember),
+        _ => None,
+    }
 }
 
 impl EventEmitter<DismissEvent> for QuickOpen {}
@@ -256,8 +320,9 @@ struct Command {
 }
 
 struct Symbol {
-    /// Guessed from the outline item's text, which outlines don't classify.
     kind: Option<language::SymbolKind>,
+    /// The row of the symbol's name, to match it with a document symbol.
+    name_row: u32,
     name: SharedString,
     depth: usize,
     position: Anchor,
@@ -989,7 +1054,7 @@ impl PickerDelegate for QuickOpenDelegate {
             }
             Match::Symbol(symbol_match) => {
                 let symbol = self.symbols.get(symbol_match.candidate_id)?;
-                item.start_slot::<Icon>(symbol.kind.map(|kind| symbol_icon(kind, cx)))
+                item.start_slot(symbol_icon(symbol.kind, cx))
                     .child(
                         h_flex()
                             .pl(rems(symbol.depth as f32))
@@ -1009,7 +1074,7 @@ impl PickerDelegate for QuickOpenDelegate {
                         abs_path.to_string_lossy().to_string().into()
                     }
                 };
-                item.start_slot(symbol_icon(symbol.kind, cx)).child(
+                item.start_slot(symbol_icon(Some(symbol.kind), cx)).child(
                     h_flex()
                         .gap_2()
                         .min_w_0()
@@ -1161,8 +1226,13 @@ fn shortcut_for(action: &dyn Action, cx: &App) -> Option<ui::KeyBinding> {
 
 /// The Codicon for a kind of symbol, colored like that kind of token in the
 /// theme's syntax highlighting, the way VS Code colors its symbol icons.
-fn symbol_icon(kind: language::SymbolKind, cx: &App) -> Icon {
+fn symbol_icon(kind: Option<language::SymbolKind>, cx: &App) -> Icon {
     use language::SymbolKind as Kind;
+    let Some(kind) = kind else {
+        return Icon::new(IconName::SymbolMisc)
+            .size(IconSize::Small)
+            .color(Color::Muted);
+    };
     let (icon, token) = match kind {
         Kind::Function | Kind::Method | Kind::Constructor => (IconName::SymbolMethod, "function"),
         Kind::Class => (IconName::SymbolClass, "type"),
